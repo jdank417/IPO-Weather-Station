@@ -12,7 +12,7 @@ expected volatility ("fear") and inflation to the odds that the IPO market is
   time-varying transition probabilities maps volatility and inflation
   covariates onto the probability of a hot IPO market.
 
-Status: Milestone 1 (scaffolding and Pages deploy). See `CLAUDE.md` for the
+Status: Milestone 2 (daily VIX term-structure calibration). See `CLAUDE.md` for the
 full plan and `docs/` for design notes.
 
 ## Layout
@@ -33,6 +33,15 @@ python3 -m http.server -d site 8000
 
 then open http://localhost:8000.
 
+## Pipeline
+
+```
+python3 -m venv .venv && .venv/bin/pip install -r pipeline/requirements.txt
+.venv/bin/python -m pytest
+.venv/bin/python -m pipeline.update          # download Cboe CSVs, fit, write site/data/
+.venv/bin/python -m pipeline.update --offline  # reuse data/cache/
+```
+
 ## Deploying
 
 In the repository's **Settings → Pages**, set **Source** to **GitHub Actions**.
@@ -40,7 +49,8 @@ Every push to `main` that touches `site/` publishes the site.
 
 ## Data sources
 
-- Cboe Global Markets: VIX9D, VIX, VIX3M, VIX6M and SKEW index histories
-  (to be wired up in Milestone 2).
+- Cboe Global Markets: VIX9D, VIX, VIX3M, VIX6M and SKEW daily index
+  histories (cdn-api.cboe.com `daily_prices` CSVs). Raw files are not
+  redistributed here; see `docs/data_sources.rst` for usage terms.
 - Jay R. Ritter, University of Florida, IPO data (Stage 2).
 - Federal Reserve Bank of St. Louis, FRED (Stage 2).

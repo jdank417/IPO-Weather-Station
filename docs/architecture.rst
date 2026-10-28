@@ -39,9 +39,13 @@ Workflows
    pushed with the default ``GITHUB_TOKEN`` do not start other ``push``
    workflows.
 
-``update-data.yml`` (Milestone 2)
-   Scheduled daily after the US close. Fetches, calibrates, exports JSON and
-   commits it.
+``update-data.yml``
+   Tuesday to Saturday at 01:23 and 11:17 UTC (after the US close; Cboe's
+   refresh time varies). Runs the tests, then ``python -m pipeline.update``,
+   and commits ``site/data/`` only if it changed.
+
+``ci.yml``
+   Runs the Python tests on pushes to ``main`` and on pull requests.
 
 One-time repository setup
 -------------------------

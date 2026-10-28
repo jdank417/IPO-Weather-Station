@@ -7,3 +7,5 @@ Design and mathematical documentation for the IPO Weather Station.
    :maxdepth: 2
 
    architecture
+   data_sources
+   calibration
