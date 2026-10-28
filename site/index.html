@@ -5,40 +5,119 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>IPO Weather Station</title>
-  <meta name="description" content="Linking the stock market's expected volatility and inflation to the odds that the IPO market is hot.">
+  <meta name="description" content="Sculpt the Heston implied-volatility surface implied by today's VIX term structure.">
   <link rel="stylesheet" href="css/style.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/plotly.js-gl3d-dist-min@2.35.2/plotly-gl3d.min.js"
+          integrity="sha384-2iqtxZG7QVTVIK1aD3fKbwQfCo/3iDyYom8ASNY8N8jdnpWBRncRnKFPZU95loka"
+          crossorigin="anonymous"></script>
+  <script type="module" src="js/app.js"></script>
 </head>
 <body>
-  <header class="masthead">
-    <div class="wrap">
-      <p class="eyebrow">IPO Weather Station</p>
-      <h1>How hot is the IPO market, given today's fear and inflation?</h1>
-      <p class="lede">
-        A static, client-side model that reads the VIX term structure as a
-        Heston variance forecast, sculpts the implied-volatility surface it
-        implies, and (in Stage 2) maps volatility and inflation onto the
-        probability of a hot IPO regime.
-      </p>
-    </div>
+  <header class="wrap masthead">
+    <p class="eyebrow">IPO Weather Station · Stage 1</p>
+    <h1>Volatility Surface Sculptor</h1>
+    <p class="lede">
+      Each trading day, the VIX term structure (9 days to 6 months) is read as a
+      Heston variance forecast. That fixes three of the model's five parameters.
+      Drag the sliders to reshape the implied-volatility surface those parameters
+      produce. The other two are yours to choose.
+    </p>
   </header>
 
   <main class="wrap">
-    <section class="status" aria-labelledby="status-h">
-      <h2 id="status-h">Under construction</h2>
-      <p>The site is being built in milestones. Checked items are live.</p>
-      <ol class="milestones">
-        <li class="done"><span>Repo scaffolding and Pages deploy</span></li>
-        <li class="done"><span>Cboe VIX term-structure fetcher and daily Heston calibration</span></li>
-        <li class="done"><span>In-browser Heston / COS pricer and implied-vol solver</span></li>
-        <li><span>Interactive volatility surface with sliders</span></li>
-        <li><span>IPO regime model: Ritter and FRED data, Markov switching with time-varying transitions</span></li>
-        <li><span>Hot-IPO gauge with what-if links to the surface</span></li>
-      </ol>
+    <section aria-labelledby="today-h" class="today">
+      <h2 id="today-h" class="section-h">Today's fit <span id="fit-date" class="muted"></span></h2>
+      <div class="tiles" id="tiles">
+        <div class="tile"><p class="tile-label">Spot vol √v<sub>0</sub></p><p class="tile-value" id="t-v0">…</p></div>
+        <div class="tile"><p class="tile-label">Long-run vol √θ</p><p class="tile-value" id="t-theta">…</p></div>
+        <div class="tile"><p class="tile-label">Mean-reversion half-life</p><p class="tile-value" id="t-kappa">…</p></div>
+        <div class="tile"><p class="tile-label">Cboe SKEW</p><p class="tile-value" id="t-skew">…</p></div>
+      </div>
+      <p class="note" id="fit-note"></p>
+    </section>
+
+    <section class="sculptor" aria-labelledby="surface-h">
+      <div class="card chart-card">
+        <div class="card-head">
+          <h2 id="surface-h" class="section-h">Implied-volatility surface</h2>
+          <p class="badge" id="feller" role="status" hidden></p>
+        </div>
+        <div id="surface" class="surface" aria-describedby="surface-desc"></div>
+        <p id="surface-desc" class="note">
+          Strikes are in standard deviations of ln(K/F) at today's vol for each maturity
+          (−2.5 to +2); height and color show implied vol (%). Hover for exact values. Gaps mark prices too small to resolve.
+          <span id="calc-time"></span>
+        </p>
+        <details>
+          <summary>Show surface as a table</summary>
+          <div class="table-wrap"><table id="surface-table"></table></div>
+        </details>
+      </div>
+
+      <form class="card controls" id="controls" aria-label="Heston parameters">
+        <fieldset>
+          <legend>Fitted each day from the VIX term structure</legend>
+          <div class="slider">
+            <label for="s-v0">Spot vol √v<sub>0</sub></label>
+            <output for="s-v0" id="o-v0"></output>
+            <input type="range" id="s-v0" min="0.05" max="1.00" step="0.005">
+          </div>
+          <div class="slider">
+            <label for="s-theta">Long-run vol √θ</label>
+            <output for="s-theta" id="o-theta"></output>
+            <input type="range" id="s-theta" min="0.05" max="0.80" step="0.005">
+          </div>
+          <div class="slider">
+            <label for="s-kappa">Mean reversion κ</label>
+            <output for="s-kappa" id="o-kappa"></output>
+            <input type="range" id="s-kappa" min="0.1" max="20" step="0.05">
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Not identified by the term structure: your assumption</legend>
+          <div class="slider">
+            <label for="s-xi">Vol of vol ξ</label>
+            <output for="s-xi" id="o-xi"></output>
+            <input type="range" id="s-xi" min="0.05" max="2.0" step="0.01">
+          </div>
+          <div class="slider">
+            <label for="s-rho">Spot–vol correlation ρ</label>
+            <output for="s-rho" id="o-rho"></output>
+            <input type="range" id="s-rho" min="-0.99" max="0.5" step="0.01">
+          </div>
+          <p class="note">ξ and ρ shape the smile and skew but leave the VIX term structure unchanged, so the daily fit cannot pin them down. Defaults: ξ = 0.6, ρ = −0.7.</p>
+        </fieldset>
+        <button type="button" id="reset">Reset to today</button>
+      </form>
+    </section>
+
+    <section class="card" aria-labelledby="ts-h">
+      <h2 id="ts-h" class="section-h">VIX term structure vs. the fitted curve</h2>
+      <div id="termstructure" class="termstructure"></div>
+      <details>
+        <summary>Show as a table</summary>
+        <div class="table-wrap"><table id="ts-table"></table></div>
+      </details>
     </section>
   </main>
 
   <footer class="wrap foot">
-    <p>Static site on GitHub Pages. Data refreshed by GitHub Actions. Not investment advice.</p>
+    <h2 class="section-h">Roadmap</h2>
+    <ol class="milestones">
+      <li class="done"><span>Repo scaffolding and Pages deploy</span></li>
+      <li class="done"><span>Cboe VIX term-structure fetcher and daily Heston calibration</span></li>
+      <li class="done"><span>In-browser Heston / COS pricer and implied-vol solver</span></li>
+      <li class="done"><span>Interactive volatility surface with sliders</span></li>
+      <li><span>IPO regime model: Ritter and FRED data, Markov switching with time-varying transitions</span></li>
+      <li><span>Hot-IPO gauge with what-if links to the surface</span></li>
+    </ol>
+    <p>
+      Model: Heston (1993). Characteristic function in the Albrecher et al. (2007) form,
+      priced with the COS method (Fang &amp; Oosterlee 2008), all in your browser.
+      Index data: Cboe Global Markets, used to fit parameters; raw data is not redistributed.
+      Not investment advice.
+      <a href="https://github.com/jdank417/IPO-Weather-Station">Source and docs</a>.
+    </p>
   </footer>
 </body>
 </html>

@@ -10,3 +10,4 @@ Design and mathematical documentation for the IPO Weather Station.
    data_sources
    calibration
    pricing
+   ui

@@ -12,7 +12,8 @@ expected volatility ("fear") and inflation to the odds that the IPO market is
   time-varying transition probabilities maps volatility and inflation
   covariates onto the probability of a hot IPO market.
 
-Status: Milestone 3 (in-browser Heston/COS pricer and implied-vol solver). See `CLAUDE.md` for the
+Status: Stage 1 complete (Milestones 1 to 4): live volatility surface sculptor.
+Next: Stage 2, the IPO window gauge. See `CLAUDE.md` for the
 full plan and `docs/` for design notes.
 
 ## Layout
