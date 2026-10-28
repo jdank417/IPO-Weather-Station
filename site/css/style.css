@@ -15,6 +15,8 @@
   --good-text: #006300;
   --warning: #fab219;
   --track: #e1e0d9;
+  --track-blue: #cde2fb;
+  --band: rgba(42, 120, 214, 0.28);
   /* sequential blue, low -> high */
   --seq: #cde2fb, #9ec5f4, #6da7ec, #3987e5, #256abf, #184f95, #0d366b;
   --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -36,6 +38,8 @@
     --series-3: #199e70;
     --good-text: #0ca30c;
     --track: #383835;
+    --track-blue: #0d366b;
+    --band: rgba(57, 135, 229, 0.35);
     /* low values recede into the dark surface */
     --seq: #0d366b, #184f95, #256abf, #3987e5, #6da7ec, #9ec5f4, #cde2fb;
   }
@@ -56,6 +60,8 @@
   --series-3: #199e70;
   --good-text: #0ca30c;
   --track: #383835;
+  --track-blue: #0d366b;
+  --band: rgba(57, 135, 229, 0.35);
   --seq: #0d366b, #184f95, #256abf, #3987e5, #6da7ec, #9ec5f4, #cde2fb;
 }
 
@@ -144,6 +150,28 @@ main { display: grid; gap: 16px; padding-bottom: 2rem; }
 .surface { width: 100%; height: min(70vh, 34rem); min-height: 22rem; }
 @media (max-width: 36rem) { .surface { height: 24rem; min-height: 0; } }
 .termstructure { width: 100%; height: 20rem; }
+
+/* IPO forecast */
+.gauge-body { display: grid; gap: 16px; align-items: center; }
+@media (min-width: 44rem) { .gauge-body { grid-template-columns: auto 1fr; gap: 32px; } }
+.hero-value { margin: 0; font-size: 3.5rem; font-weight: 600; line-height: 1; }
+.hero-label { margin: .35rem 0 0; color: var(--text-2); max-width: 16rem; }
+.meter { position: relative; height: 14px; border-radius: 7px; background: var(--track-blue); overflow: hidden; }
+.meter-band { position: absolute; top: 0; bottom: 0; background: var(--band); }
+.meter-fill { position: absolute; top: 3px; bottom: 3px; left: 0; border-radius: 4px; background: var(--accent); transition: width .12s linear; }
+.meter-scale { display: flex; justify-content: space-between; color: var(--muted); font-size: .75rem; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.gauge-facts { margin: 12px 0 0; padding-left: 1.1rem; color: var(--text-2); font-size: .9rem; }
+.gauge-facts li { margin: .2rem 0; }
+.caveat { border-top: 1px solid var(--grid); padding-top: 10px; margin-top: 12px; }
+.mini-gauge {
+  margin: 0; padding: 8px 10px; border-radius: 8px;
+  background: var(--page); border: 1px solid var(--border);
+  font-size: .9rem; font-variant-numeric: tabular-nums;
+}
+.mini-gauge strong { font-size: 1.05rem; }
+.chart-h { margin: 12px 0 0; font-size: .85rem; font-weight: 600; color: var(--text-2); }
+.small-chart { width: 100%; height: 13rem; }
+caption { text-align: left; }
 
 /* status badge: icon + label, never color alone */
 .badge {

@@ -12,8 +12,9 @@ expected volatility ("fear") and inflation to the odds that the IPO market is
   time-varying transition probabilities maps volatility and inflation
   covariates onto the probability of a hot IPO market.
 
-Status: Stage 1 complete (Milestones 1 to 4): live volatility surface sculptor.
-Stage 2 regime model estimated (Milestone 5); gauge UI in progress. See `CLAUDE.md` for the
+Status: all six milestones done.
+Stage 2 complete (Milestones 5 and 6): IPO window forecast wired to the
+surface sliders. Live at https://jdank417.github.io/IPO-Weather-Station/ See `CLAUDE.md` for the
 full plan and `docs/` for design notes.
 
 ## Layout

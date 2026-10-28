@@ -49,6 +49,14 @@ test('site gauge: point estimate, band and monotone response to a covariate', ()
   assert.equal(Math.sign(moved), expectedSign);
 });
 
+test('forward path ends at the current month and matches pHotCurrent', () => {
+  const g = buildGauge(site);
+  const path = g.forwardPath;
+  assert.equal(path.length, site.forward.months.length - 1);
+  assert.equal(path[path.length - 1].month, g.currentMonth);
+  assert.ok(Math.abs(path[path.length - 1].p - g.pHotCurrent) < 1e-12);
+});
+
 test('design row standardization', () => {
   const cov = [{ mean: 10, sd: 2 }, { mean: 0, sd: 1 }];
   assert.deepEqual(designRow([12, -1], cov), [1, 1, -1]);

@@ -4,8 +4,9 @@
 import { fellerOK } from './heston.js';
 import { ivSurface } from './surface.js';
 import {
-  SURFACE_TS, modelVix, surfaceGrid, halfLifeDays,
+  SURFACE_TS, modelVix, surfaceGrid, halfLifeDays, expectedAvgVariance,
 } from './termstructure.js';
+import { buildGauge } from './regime.js';
 
 const DEFAULT_XI = 0.6;
 const DEFAULT_RHO = -0.7;
@@ -17,6 +18,11 @@ const pct = (x, d = 1) => `${(100 * x).toFixed(d)}%`;
 const minus = (s) => String(s).replace('-', '−');
 
 const MATURITY_LABELS = ['1w', '2w', '1m', '2m', '3m', '6m', '9m', '1y', '18m', '2y'];
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const monthName = (m) => `${MONTHS[+m.slice(5, 7) - 1]} ${m.slice(0, 4)}`;
+const nextMonth = (m) => { const y = +m.slice(0, 4), mm = +m.slice(5, 7); return `${y + (mm === 12)}-${String(mm % 12 + 1).padStart(2, '0')}`; };
+// gauge-only inputs: they never touch the surface
+const GAUGE_ONLY = new Set(['skew', 'be5']);
 
 const state = {
   today: null,     // {v0, kappa, theta} from latest.json
@@ -48,10 +54,13 @@ const SLIDERS = {
   kappa: { el: 's-kappa', out: 'o-kappa', toInput: (x) => x, fromInput: (x) => x, fmt: (k) => `${k.toFixed(2)} · half-life ${Math.round(halfLifeDays(k))} d` },
   xi: { el: 's-xi', out: 'o-xi', toInput: (x) => x, fromInput: (x) => x, fmt: (x) => x.toFixed(2) },
   rho: { el: 's-rho', out: 'o-rho', toInput: (x) => x, fromInput: (x) => x, fmt: (x) => minus(x.toFixed(2)) },
+  skew: { el: 's-skew', out: 'o-skew', toInput: (x) => x, fromInput: (x) => x, fmt: (x) => x.toFixed(1) },
+  be5: { el: 's-be5', out: 'o-be5', toInput: (x) => x, fromInput: (x) => x, fmt: (x) => `${x.toFixed(2)}%` },
 };
 
 function setSliders(p) {
   for (const [key, s] of Object.entries(SLIDERS)) {
+    if (p[key] == null) continue;
     const input = $(s.el);
     const x = s.toInput(p[key]);
     // clamp to the slider's range so out-of-range fits still display
@@ -64,10 +73,11 @@ function setSliders(p) {
 // fitted values instead of snapping to the slider step.
 function readSlider(target) {
   const entry = Object.entries(SLIDERS).find(([, s]) => s.el === target.id);
-  if (!entry) return;
+  if (!entry) return null;
   const [key, s] = entry;
   state.params = { ...state.params, [key]: s.fromInput(parseFloat(target.value)) };
   $(s.out).textContent = s.fmt(state.params[key]);
+  return key;
 }
 
 /* ---------- surface computation (worker with main-thread fallback) ---------- */
@@ -125,14 +135,15 @@ function onSurface(iv, ms) {
 // slider is held so the main thread stays free to track the finger; the exact
 // final surface is drawn on release.
 const SURFACE_MIN_MS = 120;
-const dirty = { surface: false, ts: false };
+const dirty = { surface: false, ts: false, history: false };
 let drawQueued = false;
 let lastSurfaceDraw = 0;
 let surfaceTimer = null;
 
-function scheduleDraw({ surface = true, ts = true } = {}) {
+function scheduleDraw({ surface = true, ts = true, history = surface && ts } = {}) {
   dirty.surface ||= surface;
   dirty.ts ||= ts;
+  dirty.history ||= history;
   if (drawQueued) return;
   drawQueued = true;
   requestAnimationFrame(flushDraw);
@@ -140,6 +151,10 @@ function scheduleDraw({ surface = true, ts = true } = {}) {
 
 function flushDraw() {
   drawQueued = false;
+  if (dirty.history) {
+    dirty.history = false;
+    drawHistory();
+  }
   if (dirty.ts) {
     dirty.ts = false;
     drawTermStructure();
@@ -357,16 +372,146 @@ function renderTiles() {
   $('fit-note').textContent = `Fit to ${L.fit.n_points} Cboe indices; root-mean-square error ${L.fit.rmse_volpts.toFixed(2)} vol points.${flags}${stale}`;
 }
 
+/* ---------- IPO forecast ---------- */
+
+function gaugeInputs(p) {
+  const vol1y = 100 * Math.sqrt(expectedAvgVariance(1, p));
+  return { vol1y, skew: p.skew, be5: p.be5 };
+}
+
+function renderGauge() {
+  const g = state.gauge;
+  if (!g) {
+    $('g-value').textContent = '–';
+    $('g-label').textContent = 'The IPO model could not be loaded.';
+    $('mini-gauge').textContent = 'IPO forecast unavailable.';
+    return;
+  }
+  const inp = gaugeInputs(state.params);
+  const r = g.probability([inp.vol1y, inp.skew, inp.be5]);
+  const next = monthName(nextMonth(g.currentMonth));
+  const p0 = (x) => `${Math.round(100 * x)}%`;
+  $('g-value').textContent = p0(r.p);
+  $('g-label').textContent = `chance that ${next} is a hot IPO month`;
+  $('g-fill').style.width = `${(100 * r.p).toFixed(1)}%`;
+  $('g-band').style.left = `${(100 * r.lo).toFixed(1)}%`;
+  $('g-band').style.width = `${(100 * (r.hi - r.lo)).toFixed(1)}%`;
+  $('g-meter').setAttribute('aria-label', `${p0(r.p)}; 90% range ${p0(r.lo)} to ${p0(r.hi)}`);
+  $('g-band-text').textContent = `Shaded: 90% range over parameter uncertainty, ${p0(r.lo)} to ${p0(r.hi)}.`;
+  $('mini-gauge').innerHTML = `Hot-IPO odds for ${next}: <strong>${p0(r.p)}</strong> <span class="muted">(${p0(r.lo)}–${p0(r.hi)})</span>`;
+  $('vol1y-note').textContent = `The forecast's volatility input is the 1-year expected vol implied by v0, θ and κ: now ${inp.vol1y.toFixed(1)}%.`;
+}
+
+function renderRegimeStatic() {
+  const R = state.regime;
+  if (!R) {
+    for (const id of ['s-skew', 's-be5']) $(id).disabled = true;
+    $('history-note').textContent = 'The IPO model data could not be loaded.';
+    return;
+  }
+  const means = R.regime_means_ipos_per_month;
+  const last = R.last_filtered;
+  const fwd = R.forward.months;
+  const facts = [
+    `Hot months average ${means.hot.toFixed(1)} net IPOs; cold months ${means.cold.toFixed(1)} (${R.sample.first.slice(0, 4)}–${R.sample.last.slice(0, 4)}).`,
+    `Latest IPO counts: ${monthName(last.month)}, when the market was most likely ${last.p_hot >= 0.5 ? 'hot' : 'cold'} (P(hot) ${Math.round(100 * last.p_hot)}%).`,
+    fwd.length > 1 ? `${monthName(fwd[1])} to ${monthName(fwd[fwd.length - 1])}: no IPO counts yet, so the model carries the regime forward using each month's volatility, SKEW and inflation.` : null,
+  ].filter(Boolean);
+  $('g-facts').innerHTML = facts.map((f) => `<li>${f}</li>`).join('');
+  $('history-note').textContent = `Net IPO counts from Jay Ritter (operating companies; excludes SPACs, penny stocks, units and similar). The probability line is the model's smoothed estimate through ${monthName(R.sample.last)}, then a forecast with no IPO data.`;
+  renderHistoryTables();
+}
+
+function drawHistory() {
+  const R = state.regime;
+  if (!plotlyReady() || !R) return;
+  const t = tokens();
+  const H = R.history;
+  const dates = H.months.map((m) => `${m}-15`);
+  const base = {
+    paper_bgcolor: t.surface, plot_bgcolor: t.surface,
+    font: { family: t.font, color: t.text, size: 12 },
+    margin: { l: 44, r: 12, t: 8, b: 28 },
+    hovermode: 'x unified',
+    // both charts share one date range so they line up vertically
+    xaxis: {
+      type: 'date', gridcolor: t.grid, linecolor: t.axis, tickfont: { color: t.muted }, zeroline: false,
+      range: [`${H.months[0]}-01`, `${nextMonth(state.forward?.length ? state.forward[state.forward.length - 1].month : H.months[H.months.length - 1])}-15`],
+    },
+    hoverlabel: { bgcolor: t.surface, bordercolor: t.axis, font: { color: t.text } },
+    showlegend: false,
+  };
+  Plotly.react('ipo-chart', [{
+    type: 'scatter', mode: 'lines', name: 'Net IPOs', uid: 'ipo',
+    x: dates, y: H.net_ipos, line: { color: t.s1, width: 2, shape: 'hvh' },
+    fill: 'tozeroy', fillcolor: hexA(t.s1, 0.12),
+    hovertemplate: '%{y} net IPOs<extra></extra>',
+  }], { ...base, yaxis: { gridcolor: t.grid, linecolor: t.axis, tickfont: { color: t.muted }, zeroline: false, rangemode: 'tozero' } },
+  { responsive: false, displayModeBar: false });
+
+  const fp = state.forward || [];
+  Plotly.react('phot-chart', [{
+    type: 'scatter', mode: 'lines', name: 'Smoothed estimate', uid: 'ph',
+    x: dates, y: H.p_hot_smoothed.map((v) => 100 * v), line: { color: t.s1, width: 2 },
+    hovertemplate: 'P(hot) %{y:.0f}%<extra>estimate</extra>',
+  }, {
+    type: 'scatter', mode: 'lines+markers', name: 'Forecast (no IPO data)', uid: 'pf',
+    x: fp.map((d) => `${d.month}-15`), y: fp.map((d) => 100 * d.p),
+    line: { color: t.s2, width: 2 }, marker: { size: 8, color: t.s2, line: { color: t.surface, width: 2 } },
+    hovertemplate: 'P(hot) %{y:.0f}%<extra>forecast</extra>',
+  }], {
+    ...base,
+    showlegend: true,
+    legend: { orientation: 'h', yanchor: 'bottom', y: 1.0, x: 0, font: { color: t.text2 } },
+    margin: { ...base.margin, t: 28 },
+    yaxis: { range: [0, 100], ticksuffix: '%', gridcolor: t.grid, linecolor: t.axis, tickfont: { color: t.muted }, zeroline: false },
+  }, { responsive: false, displayModeBar: false });
+}
+
+function hexA(hex, a) {
+  const h = hex.replace('#', '');
+  const n = parseInt(h.length === 3 ? h.split('').map((c) => c + c).join('') : h, 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+}
+
+function renderHistoryTables() {
+  const R = state.regime;
+  const H = R.history;
+  const rows = H.months.map((m, i) => `<tr><th scope="row">${m}</th><td>${H.net_ipos[i]}</td><td>${Math.round(100 * H.p_hot_smoothed[i])}%</td><td>${Math.round(100 * H.p_hot_filtered[i])}%</td></tr>`).reverse().join('');
+  const fwd = (state.forward || []).map((d) => `<tr><th scope="row">${d.month}</th><td>–</td><td colspan="2">forecast ${Math.round(100 * d.p)}%</td></tr>`).reverse().join('');
+  $('history-table').innerHTML = '<caption class="note">Newest first. Smoothed uses all months; filtered uses data up to that month.</caption>'
+    + '<thead><tr><th scope="col">Month</th><th scope="col">Net IPOs</th><th scope="col">P(hot), smoothed</th><th scope="col">P(hot), filtered</th></tr></thead>'
+    + `<tbody>${fwd}${rows}</tbody>`;
+
+  const labels = Object.fromEntries([['const', 'constant'], ...R.covariates.map((c) => [c.key, c.label])]);
+  $('coef-table').innerHTML = '<caption class="note">Transition coefficients: P(next month hot | this month\'s regime) = logistic(γ · [1, z])</caption>'
+    + '<thead><tr><th scope="col">From regime</th><th scope="col">Covariate</th><th scope="col">γ</th><th scope="col">Std. error</th></tr></thead><tbody>'
+    + R.coefficients.map((c) => `<tr><th scope="row">${c.from}</th><td style="text-align:left">${labels[c.covariate]}</td><td>${minus(c.gamma.toFixed(2))}</td><td>${c.se.toFixed(2)}</td></tr>`).join('')
+    + '</tbody>';
+  if (R.comparison) {
+    $('comparison-table').innerHTML = '<caption class="note">Alternative covariate sets, same sample (lower AIC/BIC is better)</caption>'
+      + '<thead><tr><th scope="col">Specification</th><th scope="col">Params</th><th scope="col">Log-lik.</th><th scope="col">AIC</th><th scope="col">BIC</th></tr></thead><tbody>'
+      + R.comparison.map((c) => `<tr><th scope="row">${c.spec}</th><td>${c.k ?? '–'}</td><td>${c.llf != null ? minus(c.llf.toFixed(1)) : '–'}</td><td>${c.aic?.toFixed(1) ?? '–'}</td><td>${c.bic?.toFixed(1) ?? '–'}</td></tr>`).join('')
+      + '</tbody>';
+  }
+}
+
 /* ---------- wiring ---------- */
 
-function update() {
+function update(key = null) {
+  renderGauge();
+  if (key && GAUGE_ONLY.has(key)) return;   // SKEW / breakeven: forecast only
   renderFeller(state.params);
   requestSurface(state.params);          // the surface redraws when the worker answers
   scheduleDraw({ surface: false, ts: true });
 }
 
 function reset() {
-  state.params = { ...state.today, xi: DEFAULT_XI, rho: DEFAULT_RHO };
+  const li = state.regime?.latest_inputs;
+  state.params = {
+    ...state.today, xi: DEFAULT_XI, rho: DEFAULT_RHO,
+    skew: li?.skew.value ?? state.latest?.skew?.level ?? 140, be5: li?.be5.value ?? 2.3,
+  };
   setSliders(state.params);
   update();
 }
@@ -387,12 +532,11 @@ function watchWidths() {
     if (!changed || !plotlyReady()) return;
     clearTimeout(timer);
     timer = setTimeout(() => {
-      for (const id of ['surface', 'termstructure']) if ($(id).data) Plotly.Plots.resize($(id));
+      for (const id of ['surface', 'termstructure', 'ipo-chart', 'phot-chart']) if ($(id).data) Plotly.Plots.resize($(id));
       scheduleDraw();
     }, 150);
   });
-  ro.observe($('surface'));
-  ro.observe($('termstructure'));
+  for (const id of ['surface', 'termstructure', 'ipo-chart', 'phot-chart']) ro.observe($(id));
 }
 
 async function main() {
@@ -406,11 +550,23 @@ async function main() {
     console.error('could not load data/latest.json', err);
     state.today = { ...FALLBACK };
   }
+  try {
+    const res = await fetch('data/regime.json', { cache: 'no-cache' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    state.regime = await res.json();
+    state.gauge = buildGauge(state.regime);
+    state.forward = state.gauge.forwardPath;
+  } catch (err) {
+    console.error('could not load data/regime.json', err);
+    state.regime = null;
+    state.gauge = null;
+  }
   renderTiles();
+  renderRegimeStatic();
   state.grid = surfaceGrid(state.today, SURFACE_TS);
   startWorker();
 
-  $('controls').addEventListener('input', (e) => { readSlider(e.target); update(); });
+  $('controls').addEventListener('input', (e) => update(readSlider(e.target)));
   $('controls').addEventListener('pointerdown', (e) => { if (e.target.type === 'range') startDrag(); });
   for (const ev of ['pointerup', 'pointercancel', 'change']) window.addEventListener(ev, endDrag);
   for (const d of document.querySelectorAll('details')) d.addEventListener('toggle', () => scheduleDraw());
@@ -423,7 +579,7 @@ async function main() {
     window.addEventListener('load', () => {
       if (plotlyReady()) scheduleDraw();
       else {
-        for (const id of ['surface', 'termstructure']) {
+        for (const id of ['surface', 'termstructure', 'ipo-chart', 'phot-chart']) {
           $(id).innerHTML = '<p class="error">The chart library could not be loaded. The tables below still show the values.</p>';
           $(id).style.height = 'auto';
         }

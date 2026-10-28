@@ -43,6 +43,8 @@ Surface
 * Charts resize only when their width changes (debounced). Plotly's
   ``responsive`` mode is off because mobile browsers fire height-only resizes
   whenever the address bar shows or hides.
+* The pinned gl3d bundle has no bar trace, so monthly counts are drawn as a
+  step line with a light area wash.
 * If the browser drops the WebGL context, the page rebuilds the surface.
 * Range inputs use ``touch-action: none`` so a slightly diagonal drag on a
   slider does not scroll the page.
@@ -60,6 +62,28 @@ once v0, κ or θ move, the curve implied by the sliders. A legend is always
 shown and a table view mirrors the values. Category colors were checked with a
 palette validator in both modes (worst colorblind-simulated separation
 ΔE 9.2 light, 9.4 dark).
+
+IPO window forecast
+-------------------
+
+The top card shows the probability that **next month** is a hot IPO month
+(``site/js/regime.js``; see :doc:`regime_model`), with a meter whose shaded
+band is the 90% range over 300 parameter draws. A compact copy sits at the top
+of the slider panel so it stays visible while dragging.
+
+* v0, θ and κ feed the forecast through the 1-year expected vol
+  :math:`\sqrt{A(1y)}`; ξ and ρ are labelled "surface only".
+* SKEW and 5-year breakeven sliders feed only the forecast; moving them does
+  not recompute the surface.
+* "Reset to today" restores the latest daily SKEW and breakeven as well.
+* The card states plainly that none of the covariate effects is statistically
+  significant.
+
+The history section shows Ritter's monthly net IPO counts and the model's
+smoothed hot-regime probability, followed by the forecast path (no IPO data)
+up to the current month, on a shared date axis. Tables mirror both charts, and
+the coefficients (with standard errors) and the model comparison are one click
+away.
 
 Dependencies
 ------------

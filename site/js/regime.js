@@ -93,9 +93,20 @@ export function buildGauge(data) {
   const point = prepare(modelFromParams(data.params));
   const draws = (data.draws || []).map((d) => prepare(modelFromDraw(d)));
 
+  // forecast path for the months after the sample (point estimate)
+  const path = [];
+  {
+    let p = filter(point.model, history.y, Xhist).last;
+    rowsBeforeCurrent.forEach((x, i) => {
+      p = step(p, point.model, x);
+      path.push({ month: forward.months[i + 1], p: p[1] });
+    });
+  }
+
   return {
     currentMonth: forward.months[forward.months.length - 1],
     pHotCurrent: point.pCurrent[1],
+    forwardPath: path,
     /** P(next month is hot) for raw covariate values, with a 90% band over parameter draws. */
     probability(raw) {
       const x = designRow(raw, covariates);

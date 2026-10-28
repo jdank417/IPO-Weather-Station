@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>IPO Weather Station</title>
-  <meta name="description" content="Sculpt the Heston implied-volatility surface implied by today's VIX term structure.">
+  <meta name="description" content="How the options market's fear and inflation relate to the odds of a hot IPO market, with a live Heston volatility surface.">
   <link rel="stylesheet" href="css/style.css">
   <script defer src="https://cdn.jsdelivr.net/npm/plotly.js-gl3d-dist-min@2.35.2/plotly-gl3d.min.js"
           integrity="sha384-2iqtxZG7QVTVIK1aD3fKbwQfCo/3iDyYom8ASNY8N8jdnpWBRncRnKFPZU95loka"
@@ -14,17 +14,42 @@
 </head>
 <body>
   <header class="wrap masthead">
-    <p class="eyebrow">IPO Weather Station · Stage 1</p>
-    <h1>Volatility Surface Sculptor</h1>
+    <p class="eyebrow">IPO Weather Station</p>
+    <h1>Is the IPO window open?</h1>
     <p class="lede">
-      Each trading day, the VIX term structure (9 days to 6 months) is read as a
-      Heston variance forecast. That fixes three of the model's five parameters.
-      Drag the sliders to reshape the implied-volatility surface those parameters
-      produce. The other two are yours to choose.
+      Each trading day, the VIX term structure is read as a Heston variance forecast,
+      and a regime model links that volatility, crash fear (SKEW) and inflation
+      expectations to the odds that next month is a hot IPO month. Reshape the
+      volatility surface below and watch the forecast respond.
     </p>
   </header>
 
   <main class="wrap">
+    <section class="card gauge" aria-labelledby="gauge-h">
+      <h2 id="gauge-h" class="section-h">IPO window forecast</h2>
+      <div class="gauge-body">
+        <div class="gauge-hero">
+          <p class="hero-value" id="g-value">…</p>
+          <p class="hero-label" id="g-label">chance that next month is a hot IPO month</p>
+        </div>
+        <div class="gauge-meter-wrap">
+          <div class="meter" id="g-meter" role="img" aria-label="">
+            <div class="meter-band" id="g-band"></div>
+            <div class="meter-fill" id="g-fill"></div>
+          </div>
+          <div class="meter-scale" aria-hidden="true"><span>0%</span><span>50%</span><span>100%</span></div>
+          <p class="note" id="g-band-text"></p>
+        </div>
+      </div>
+      <ul class="gauge-facts" id="g-facts"></ul>
+      <p class="note caveat">
+        Volatility, SKEW and inflation move these odds in sensible directions, but in
+        16 years of monthly data none of the effects is statistically significant.
+        Treat the number as what the model's point estimates imply; the range shows how
+        little the data pin down. <a href="#history-h">History and model details</a>.
+      </p>
+    </section>
+
     <section aria-labelledby="today-h" class="today">
       <h2 id="today-h" class="section-h">Today's fit <span id="fit-date" class="muted"></span></h2>
       <div class="tiles" id="tiles">
@@ -54,9 +79,10 @@
         </details>
       </div>
 
-      <form class="card controls" id="controls" aria-label="Heston parameters">
+      <form class="card controls" id="controls" aria-label="Model inputs">
+        <p class="mini-gauge" id="mini-gauge" aria-live="polite">Hot-IPO odds next month: …</p>
         <fieldset>
-          <legend>Fitted each day from the VIX term structure</legend>
+          <legend>Fitted each day from the VIX term structure · feed the surface and the IPO forecast</legend>
           <div class="slider">
             <label for="s-v0">Spot vol √v<sub>0</sub></label>
             <output for="s-v0" id="o-v0"></output>
@@ -74,7 +100,7 @@
           </div>
         </fieldset>
         <fieldset>
-          <legend>Not identified by the term structure: your assumption</legend>
+          <legend>Not identified by the term structure: your assumption · surface only</legend>
           <div class="slider">
             <label for="s-xi">Vol of vol ξ</label>
             <output for="s-xi" id="o-xi"></output>
@@ -85,7 +111,21 @@
             <output for="s-rho" id="o-rho"></output>
             <input type="range" id="s-rho" min="-0.99" max="0.5" step="0.01">
           </div>
-          <p class="note">ξ and ρ shape the smile and skew but leave the VIX term structure unchanged, so the daily fit cannot pin them down. Defaults: ξ = 0.6, ρ = −0.7.</p>
+          <p class="note">ξ and ρ shape the smile and skew but leave the VIX term structure unchanged, so the daily fit cannot pin them down. They do not affect the IPO forecast. Defaults: ξ = 0.6, ρ = −0.7.</p>
+        </fieldset>
+        <fieldset>
+          <legend>IPO forecast only</legend>
+          <div class="slider">
+            <label for="s-skew">Cboe SKEW</label>
+            <output for="s-skew" id="o-skew"></output>
+            <input type="range" id="s-skew" min="100" max="180" step="0.5">
+          </div>
+          <div class="slider">
+            <label for="s-be5">5-year breakeven inflation</label>
+            <output for="s-be5" id="o-be5"></output>
+            <input type="range" id="s-be5" min="0" max="4" step="0.01">
+          </div>
+          <p class="note" id="vol1y-note">The forecast's volatility input is the 1-year expected vol implied by v0, θ and κ.</p>
         </fieldset>
         <button type="button" id="reset">Reset to today</button>
       </form>
@@ -99,22 +139,42 @@
         <div class="table-wrap"><table id="ts-table"></table></div>
       </details>
     </section>
+    <section class="card" aria-labelledby="history-h">
+      <h2 id="history-h" class="section-h">IPO activity and the hot regime</h2>
+      <p class="note" id="history-note"></p>
+      <h3 class="chart-h">Net IPOs per month</h3>
+      <div id="ipo-chart" class="small-chart"></div>
+      <h3 class="chart-h">Probability of the hot regime</h3>
+      <div id="phot-chart" class="small-chart"></div>
+      <details>
+        <summary>Show as a table</summary>
+        <div class="table-wrap"><table id="history-table"></table></div>
+      </details>
+      <details>
+        <summary>Model coefficients and comparison</summary>
+        <div class="table-wrap"><table id="coef-table"></table></div>
+        <div class="table-wrap"><table id="comparison-table"></table></div>
+        <p class="note">Two-regime Markov-switching model of log(1 + net IPOs) with logistic time-varying transition probabilities (Diebold, Lee &amp; Weinbach 1994; Filardo 1994), estimated by maximum likelihood. Covariates are last month's values, standardized. Full write-up in <a href="https://github.com/jdank417/IPO-Weather-Station/blob/main/docs/regime_model.rst">docs/regime_model.rst</a>.</p>
+      </details>
+    </section>
   </main>
 
   <footer class="wrap foot">
-    <h2 class="section-h">Roadmap</h2>
+    <h2 class="section-h">Built in six milestones</h2>
     <ol class="milestones">
       <li class="done"><span>Repo scaffolding and Pages deploy</span></li>
       <li class="done"><span>Cboe VIX term-structure fetcher and daily Heston calibration</span></li>
       <li class="done"><span>In-browser Heston / COS pricer and implied-vol solver</span></li>
       <li class="done"><span>Interactive volatility surface with sliders</span></li>
-      <li><span>IPO regime model: Ritter and FRED data, Markov switching with time-varying transitions</span></li>
-      <li><span>Hot-IPO gauge with what-if links to the surface</span></li>
+      <li class="done"><span>IPO regime model: Ritter and FRED data, Markov switching with time-varying transitions</span></li>
+      <li class="done"><span>Hot-IPO gauge with what-if links to the surface</span></li>
     </ol>
     <p>
       Model: Heston (1993). Characteristic function in the Albrecher et al. (2007) form,
       priced with the COS method (Fang &amp; Oosterlee 2008), all in your browser.
       Index data: Cboe Global Markets, used to fit parameters; raw data is not redistributed.
+      IPO data: Jay R. Ritter, University of Florida (vintage through December 2025).
+      Inflation: Federal Reserve Bank of St. Louis, FRED.
       Not investment advice.
       <a href="https://github.com/jdank417/IPO-Weather-Station">Source and docs</a>.
     </p>
