@@ -36,8 +36,8 @@ What is and is not identified
 
 * :math:`A(T)` depends on :math:`v_0, \kappa, \theta` only. **The vol-of-vol**
   :math:`\xi` **and the correlation** :math:`\rho` **do not appear and are not
-  identified by the term structure.** The site exposes them as user sliders with
-  stated defaults. Cboe's SKEW index is stored separately as a crash-fear measure.
+  identified by the term structure.** They come from VVIX and realized
+  correlation instead (:doc:`odds_model`).
 * With four horizons and three parameters there is one degree of freedom.
 * When the curve is close to a straight ramp across 9 to 182 days, only the
   product :math:`\kappa(\theta - v_0)` is pinned down: an unpenalized fit slides
@@ -72,8 +72,9 @@ lambda     median RMSE  theta 95th pct (vol)    kappa-at-bound days
 (RMSE in VIX points, 2011-01-04 to 2026-10-27.)
 
 Bounds: :math:`v_0 \in [10^{-4}, 4]`, :math:`\theta \in [10^{-4}, 1]`,
-:math:`\kappa \in [0.1, 30]` per year (half-life between about 8 days and 7
-years).
+:math:`\kappa \in [0.1, 60]` per year (half-life between about 4 days and 7
+years). The cap was raised from 30 after March 2020, whose steeply inverted
+curves need very fast mean reversion.
 
 Solver details
   For fixed :math:`\kappa`, :math:`A(T)` is linear in :math:`(v_0, \theta)`. A
@@ -95,8 +96,11 @@ Every calendar row from the first fittable day is exported, with flags:
 ``insufficient_data``
    Fewer than three horizons; no parameters are reported.
 ``bad_fit``
-   Worst residual above 0.75 VIX points. Usually a humped curve (e.g. VIX9D
-   above VIX but VIX below VIX3M), which a one-factor model cannot produce.
+   Worst residual above both 0.75 VIX points and 4% of the 30-day VIX level.
+   Usually a humped or extremely inverted curve, which a one-factor model
+   cannot reproduce. These days are *kept* in the published history with an
+   ``approx`` flag: they are often the most dramatic crisis days, and the site
+   labels them as approximate.
 ``<param>_at_bound``
    An estimate sits on a bound (mostly ``kappa`` at 30 on crash days).
 ``flat_term_structure``

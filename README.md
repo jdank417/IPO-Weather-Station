@@ -1,68 +1,58 @@
-# IPO Weather Station
+# Market Weather Station
 
-A static, math-heavy web app on GitHub Pages that links the stock market's
-expected volatility ("fear") and inflation to the odds that the IPO market is
-"hot."
+**What the options market thinks happens next to the S&P 500.**
 
-- **Stage 1 – Volatility Surface Sculptor.** Each day a GitHub Action fits the
-  Heston variance parameters (v0, kappa, theta) to Cboe's VIX term structure.
-  The browser prices options with the COS method and draws the implied-vol
-  surface, with sliders for every Heston parameter.
-- **Stage 2 – IPO window gauge.** A two-regime Markov-switching model with
-  time-varying transition probabilities maps volatility and inflation
-  covariates onto the probability of a hot IPO market.
+Live: https://jdank417.github.io/IPO-Weather-Station/
 
-Status: all six milestones done.
-Stage 2 complete (Milestones 5 and 6): IPO window forecast wired to the
-surface sliders. Live at https://jdank417.github.io/IPO-Weather-Station/ See `CLAUDE.md` for the
-full plan and `docs/` for design notes.
+- **Odds**: the market-implied chance the S&P 500 is 10% lower, or higher, by
+  year-end; a "1 in N" for any move and horizon you pick; and a fan chart of
+  where the index could be over the next year.
+- **Crisis replay**: press play on the COVID crash, Volmageddon, the 2022 rate
+  shock, the 2025 tariff shock and more, and watch the market's "fear
+  landscape" and crash odds move day by day.
+
+Every trading day a GitHub Action fits a Heston volatility model to Cboe's VIX
+term structure, VVIX and the S&P 500's recent behavior, and commits the
+parameters as JSON. The browser does the rest: option-pricing math (COS
+method) turns the parameters into probabilities on the fly. Not investment
+advice; the odds are risk-neutral (they include an insurance premium) and the
+model has no sudden-crash jumps.
 
 ## Layout
 
 ```
-site/        static site published to Pages (reads JSON from site/data/)
+site/        static site (reads JSON from site/data/)
 pipeline/    Python fetch / calibrate / export, run by GitHub Actions
-data/raw/    raw downloads, incl. manually added Ritter IPO data
-docs/        reStructuredText documentation
-.github/     deploy and data-update workflows
+tests/js/    JavaScript tests (node:test, no dependencies)
+docs/        reStructuredText documentation of the math and design
 ```
 
-## Local preview
-
-```
-python3 -m http.server -d site 8000
-```
-
-then open http://localhost:8000.
-
-## Pipeline
+## Run it locally
 
 ```
 python3 -m venv .venv && .venv/bin/pip install -r pipeline/requirements.txt
-.venv/bin/python -m pytest
-.venv/bin/python -m pipeline.update          # download Cboe CSVs, fit, write site/data/
-.venv/bin/python -m pipeline.update --offline  # reuse data/cache/
-```
-
-JS tests (Node 22+, no dependencies):
-
-```
-npm test
-.venv/bin/python -m pipeline.tests.make_heston_fixture   # regenerate the reference fixture
+.venv/bin/python -m pytest                 # Python tests
+npm test                                   # JS tests (Node 22+)
+.venv/bin/python -m pipeline.update        # download data, fit, write site/data/
+python3 -m http.server -d site 8000        # then open http://localhost:8000
 ```
 
 ## Deploying
 
-In the repository's **Settings → Pages**, set **Source** to **GitHub Actions**.
-Every push to `main` that touches `site/` publishes the site.
+Settings → Pages → Source: **GitHub Actions**. Pushes to `main` that touch
+`site/` publish the site; the daily data job redeploys after committing data.
+An optional `FRED_API_KEY` Actions secret switches FRED downloads to the API.
 
 ## Data sources
 
-- Cboe Global Markets: VIX9D, VIX, VIX3M, VIX6M and SKEW daily index
+- Cboe Global Markets: VIX9D, VIX, VIX3M, VIX6M, VVIX and S&P 500 daily index
   histories (cdn-api.cboe.com `daily_prices` CSVs). Raw files are not
-  redistributed here; see `docs/data_sources.rst` for usage terms.
-- Jay R. Ritter, University of Florida, "Monthly Number of IPOs and the
-  Average First-Day Return" (IPOALL.xlsx),
-  https://site.warrington.ufl.edu/ritter/ipo-data/. Vintage: 1960-01 to
-  2025-12, downloaded 2026-10-28 to `data/raw/IPOALL.xlsx`.
-- Federal Reserve Bank of St. Louis, FRED: CPIAUCSL, T5YIE, T10YIE, DFII10.
+  redistributed; see `docs/data_sources.rst` for usage terms.
+- Federal Reserve Bank of St. Louis, FRED: DTB3 (3-month Treasury bill rate).
+
+## History
+
+This repository began as the "IPO Weather Station", linking market fear and
+inflation to the odds of a hot IPO market. Its regime model found no
+statistically reliable link, so the project was refocused; that code remains
+in the git history.

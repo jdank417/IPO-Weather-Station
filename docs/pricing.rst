@@ -90,6 +90,22 @@ N       L   base        high xi   rho = -0.9        slow kappa
 Defaults: ``COS_N = 2048``, ``COS_L = 12``. A 10 x 21 surface takes about
 15 ms in Node 22.
 
+Probabilities (CDF)
+-------------------
+
+``cosCdf(slice, x)`` gives :math:`P(\ln(S_T/S_0) \le x)` from the same slice:
+the COS density coefficients integrated from :math:`a` to :math:`x`,
+
+.. math::
+
+   F(x) \approx \frac{2}{b-a}\Bigl[\tfrac12 \operatorname{Re}\varphi_0\,(x-a)
+   + \sum_{k \ge 1} \operatorname{Re}\bigl(\varphi(u_k)e^{-iu_k a}\bigr)
+   \frac{\sin(u_k(x-a))}{u_k}\Bigr],
+
+with the angle-addition recurrence for the sines. It matches Gil-Pelaez
+integration to 1e-9 on the test sets and equals the strike-derivative of COS
+put prices (a digital option), as it must.
+
 Implied volatility
 ------------------
 

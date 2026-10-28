@@ -1,171 +1,75 @@
-# IPO Weather Station
+# Market Weather Station
 
-A static, math-heavy web app hosted on GitHub Pages that links the stock market's
-expected volatility ("fear") and inflation to the odds that the IPO market is
-"hot." Built in two stages; Stage 1 must be useful on its own.
+A static, math-heavy web app on GitHub Pages: **what the options market thinks
+happens next to the S&P 500.** Two tabs: market-implied odds of big moves, and
+a day-by-day replay of past crises. Written for non-specialists; technical
+detail lives in `docs/`.
+
+(The repo started as "IPO Weather Station", a volatility-to-IPO model. That
+link was not statistically reliable, so the project pivoted. The IPO code is in
+git history.)
 
 ## Hard constraints
 
-- **Hosting is GitHub Pages only.** No servers, no databases, no runtime API calls
-  that need secrets. All math the visitor interacts with runs client-side in JS.
+- **Hosting is GitHub Pages only.** No servers, no databases, no runtime API
+  calls that need secrets. All math the visitor interacts with runs client-side.
 - **Data arrives via GitHub Actions.** A scheduled workflow fetches data, runs
-  Python calibration/estimation, and commits JSON to the repo. The site only
-  reads static JSON.
-- Secrets (e.g. `FRED_API_KEY`) live in GitHub Actions secrets, never in the site.
-- Project documentation (beyond this file and the README) is written in
-  reStructuredText (`.rst`) under `docs/`.
-- Pin every third-party library version (CDN or requirements). GitHub Actions
-  are pinned by full commit SHA with the tag in a trailing comment.
+  Python calibration, and commits JSON to `site/data/`. The site only reads
+  static JSON.
+- Secrets (optional `FRED_API_KEY`) live in GitHub Actions secrets.
+- Raw Cboe data is never committed or published; only derived values and a few
+  single latest-day readings (see `docs/data_sources.rst`).
+- Project documentation beyond this file and the README is `.rst` under `docs/`.
+- Pin every third-party version (CDN with SRI hash, requirements). GitHub
+  Actions are pinned by full commit SHA with the tag in a trailing comment.
 
-## Repo layout
+## Layout
 
 ```
-site/                 static site (published to Pages)
-  index.html
-  css/
-  js/                 ES modules, no build step unless clearly needed
-    heston.js         characteristic function + COS pricer
-    impliedvol.js     Black-Scholes + IV solver
-    regime.js         Hamilton filter forward pass (TVTP)
-    worker.js         Web Worker for surface grid computation
-  data/               JSON written by the pipeline (do not hand-edit)
-pipeline/             Python: fetch, calibrate, estimate, export
-  fetch_cboe.py
-  fetch_fred.py
-  calibrate_term_structure.py
-  fit_ipo_regimes.py      (Stage 2)
-  export_json.py
+site/
+  index.html, css/style.css
+  js/
+    app.js          page controller (tabs, odds, replay)
+    heston.js       little-trap CF, COS prices and CDF
+    odds.js         odds, quantiles, fan, "1 in N"
+    impliedvol.js   Black-Scholes + IV solver
+    surface.js      IV surface grid; worker.js runs it off the main thread
+    termstructure.js  expected average variance, surface grid helper
+  data/             latest.json, history.json, events.json (pipeline output)
+pipeline/
+  fetch_cboe.py     VIX9D, VIX, VIX3M, VIX6M, VVIX, SPX
+  fetch_fred.py     DTB3
+  calibrate_term_structure.py   v0, kappa, theta per day
+  full_params.py    xi from VVIX, rho realized, drift
+  odds.py           numpy COS CDF (timeline precompute)
+  events.py         crisis windows; facts computed from data
+  export_json.py, update.py (entry point)
   tests/
-data/raw/             raw downloads, incl. manually added Ritter IPO data
-docs/                 .rst documentation of the math and design
-.github/workflows/
-  update-data.yml     scheduled daily after US close
-  deploy.yml          publish site/ to Pages
+tests/js/           node:test suites and fixtures
+docs/               .rst
+.github/workflows/  update-data.yml (daily), deploy.yml, ci.yml
 ```
 
-## Stage 1: Volatility Surface Sculptor
+## Model (details in docs/)
 
-### Model
+- Heston under the pricing measure. Daily: v0, kappa, theta from the VIX term
+  structure (bounded least squares with a weak log-kappa prior, kappa <= 60,
+  bad fits kept and flagged `approx`); xi from VVIX; rho = trailing 252-day
+  realized correlation of S&P returns with changes in v0; r = 3-month T-bill,
+  q = 1.3%.
+- Odds are terminal, risk-neutral probabilities from the COS CDF. The UI must
+  say they include an insurance premium and that the model has no jumps (tails
+  probably understated). SKEW is deliberately not used (see docs/odds_model.rst).
 
-Heston under the pricing measure:
+## Rules for changes
 
-- dS = r S dt + sqrt(v) S dW1
-- dv = kappa (theta - v) dt + xi sqrt(v) dW2, with corr(dW1, dW2) = rho
-
-### Daily calibration from the VIX term structure (Python, in Actions)
-
-Heston's expected average variance over [0, T] has a closed form:
-
-    E[avg var(0,T)] = theta + (v0 - theta) * (1 - exp(-kappa*T)) / (kappa*T)
-
-Treat (VIX_T / 100)^2 as that quantity at each horizon and fit v0, kappa, theta
-each day by bounded nonlinear least squares to Cboe's VIX9D, VIX, VIX3M, and
-VIX6M (horizons approx. 9, 30, 91, 182 calendar days / 365).
-
-- Enforce v0, theta > 0 and kappa within a sane range; warm-start from the
-  previous day's fit.
-- **xi and rho are NOT identified by the term structure.** Do not pretend
-  otherwise. Store Cboe's SKEW index alongside as a separate crash-fear measure.
-- Record fit residuals and flag bad days rather than silently dropping them.
-- Note in docs where index histories begin (shorter horizons start later), and
-  handle missing values explicitly.
-
-Source the Cboe historical CSVs from Cboe's official published data; confirm
-current URLs and any usage terms before wiring up the fetcher.
-
-### Browser pricing engine (JS)
-
-- Heston characteristic function in the "little Heston trap" form
-  (Albrecher et al., 2007) to avoid complex-log branch-cut discontinuities.
-- European call pricing with the COS method (Fang & Oosterlee, 2008), with
-  truncation range from cumulants; expose N terms as a config constant.
-- Implied vol via Newton-Raphson on Black-Scholes, falling back to bisection
-  when vega is tiny or iterations diverge.
-- Compute a grid (e.g. ~20 strikes in log-moneyness x ~10 maturities) in a
-  Web Worker so slider drags stay smooth.
-- Show a warning badge when the Feller condition 2*kappa*theta > xi^2 fails.
-
-### UI
-
-- 3D implied-vol surface (Plotly, pinned version) initialized from today's
-  fitted v0, kappa, theta with default xi and rho.
-- Sliders: v0, theta, kappa, xi, rho, plus a "reset to today" button.
-- Small panel: today's VIX term structure points vs. the fitted curve.
-- Must work on mobile and in light and dark mode.
-
-### Tests (required before UI polish)
-
-- Python: calibration recovers known parameters from synthetic term structures
-  generated by the formula above (with and without noise).
-- JS: COS prices match an independent reference (e.g. a Python numerical
-  integration of the same model, exported as a JSON fixture) to a tight
-  tolerance across a parameter grid that includes stressed cases
-  (high xi, rho near -0.9, short maturities).
-- JS: put-call parity holds; IV solver round-trips Black-Scholes prices.
-
-## Stage 2: IPO window gauge
-
-### Data
-
-- Monthly IPO counts and average first-day returns from Jay Ritter's public
-  IPO datasets (University of Florida). Download manually into `data/raw/`,
-  cite the source in the README, and document the vintage.
-- FRED: CPI (YoY), 5y and 10y breakeven inflation, 10y real yield.
-- Monthly aggregates of the Stage 1 daily fits (v0, theta, kappa) and SKEW.
-
-### Model
-
-Two-regime Markov-switching model (hot vs. cold) on IPO volume and/or first-day
-returns, with time-varying transition probabilities driven by the macro and
-volatility covariates through a logistic link (Diebold, Lee & Weinbach 1994;
-Filardo 1994). Estimate offline in Python (statsmodels `MarkovRegression`
-supports `exog_tvtp`) and export the fitted parameters to JSON.
-
-- The sample is short (roughly 15 years of monthly data once all VIX horizons
-  exist). Keep the covariate set small, report standard errors, and avoid
-  overfitting. Document the tradeoffs in `docs/`.
-- Optional extension: local projections (Jorda 2005) of IPO activity on
-  inflation surprises, exported as impulse-response curves with bands.
-
-### Browser integration
-
-- `regime.js` runs the Hamilton filter forward from the exported state to
-  produce today's probability of a hot regime.
-- What-if link: the v0 / theta / kappa sliders and a separate SKEW slider feed
-  the regime model's covariates live, so the gauge responds as the visitor
-  reshapes the surface. xi and rho affect the surface only; label that
-  clearly in the UI.
-
-## Milestones
-
-1. Repo scaffolding, Pages deploy workflow, placeholder page live.
-2. Cboe fetcher + term-structure calibration + tests; daily Action commits JSON.
-3. JS Heston/COS pricer + IV solver + tests against Python fixtures.
-4. Interactive surface UI with sliders and today's fit.
-5. (Stage 2) Ritter + FRED ingestion, TVTP Markov-switching fit, JSON export.
-6. (Stage 2) Gauge, what-if wiring, and the `.rst` write-up of the math.
-
-Work milestone by milestone and stop for review at the end of each.
-
-## Status and decisions (all six milestones done)
-
-Live at https://jdank417.github.io/IPO-Weather-Station/. Decisions made during
-the build (details in `docs/`):
-
-- Cboe raw CSVs are fetched in Actions but never committed; the site publishes
-  derived fits plus the latest day's index levels (`docs/data_sources.rst`).
-- Term-structure calibration adds a weak log-kappa prior (lambda = 0.01) because
-  near-linear curves only identify kappa*(theta - v0) (`docs/calibration.rst`).
-- COS truncation uses CF-derived c2/c4; the commonly quoted closed-form c2 was
-  unreliable (`docs/pricing.rst`). Defaults N = 2048, L = 12.
-- Regime model: log(1 + Ritter net IPOs), common variance (regime-specific
-  variances degenerate on discrete counts), TVTP on lagged standardized
-  [1y expected vol, SKEW, 5y breakeven]. Covariate effects are not
-  significant; BIC prefers constant transitions. The UI says so and shows a
-  90% band from parameter draws (`docs/regime_model.rst`).
-- `data/raw/IPOALL.xlsx` vintage runs through 2025-12; update it manually and
-  run `python -m pipeline.fit_ipo_regimes --compare`.
-- Surface redraws are throttled while dragging (WebGL flicker fix, `docs/ui.rst`).
-- Not done: optional local-projection extension.
+- Tests before UI polish. Python: calibration recovery, CDF vs Gil-Pelaez, xi
+  and rho estimators. JS: COS prices and CDF vs Python fixtures (tight
+  tolerances, stressed parameter sets), parity, IV round-trips.
+- Event facts (drawdowns, peak VIX, peak odds) are computed, never typed in.
+- Keep the page simple: headline numbers, one question widget, one chart per
+  idea. Mobile and light/dark must work; the 3D surface is throttled by
+  measured draw cost.
 
 Checks before pushing: `.venv/bin/python -m pytest` and `npm test`.
+Live at https://jdank417.github.io/IPO-Weather-Station/.

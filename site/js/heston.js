@@ -188,6 +188,28 @@ export function cosCall(slice, S0, K) {
   return Math.max(call, 0);
 }
 
+/**
+ * P(ln(S_T/S_0) <= x) from the slice: the COS density coefficients integrated
+ * from a to x. Uses the same angle-addition recurrence as cosPut.
+ */
+export function cosCdf(slice, x) {
+  const { a, b, N, re } = slice;
+  if (x <= a) return 0;
+  if (x >= b) return 1;
+  const bma = b - a;
+  const phi = Math.PI * (x - a) / bma;
+  const c1 = Math.cos(phi), s1 = Math.sin(phi);
+  let c = 1, s = 0;
+  let sum = re[0] * (x - a);
+  for (let k = 1; k < N; k++) {
+    const t = c * c1 - s * s1;
+    s = s * c1 + c * s1;
+    c = t;
+    sum += re[k] * s * bma / (k * Math.PI);
+  }
+  return Math.min(1, Math.max(0, (2 / bma) * sum));
+}
+
 /** Convenience: single option price. */
 export function hestonPrice(isCall, S0, K, T, p, opts = {}) {
   const slice = cosSlice(T, p, opts);

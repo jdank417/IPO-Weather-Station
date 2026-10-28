@@ -23,9 +23,10 @@ HORIZONS = {k: d / 365.0 for k, d in HORIZON_DAYS.items()}
 TENORS = tuple(HORIZON_DAYS)  # ordered short -> long
 
 # Parameter bounds (v0, kappa, theta). v0 up to (200% vol)^2 to survive crash days;
-# theta up to (100% vol)^2; kappa between a ~7-year and a ~8-day half-life.
+# theta up to (100% vol)^2; kappa between a ~7-year and a ~4-day half-life
+# (crisis curves such as March 2020 need very fast mean reversion).
 LOWER = np.array([1e-4, 0.1, 1e-4])
-UPPER = np.array([4.0, 30.0, 1.0])
+UPPER = np.array([4.0, 60.0, 1.0])
 
 # Weak prior on log(kappa). On days when the curve is a near-linear ramp, only
 # kappa * (theta - v0) is identified and an unpenalized fit runs to kappa -> 0,
@@ -36,6 +37,7 @@ PRIOR_WEIGHT = 0.01
 
 MIN_POINTS = 3          # three parameters need at least three horizons
 BAD_FIT_VOLPTS = 0.75   # flag a day whose worst residual exceeds this many VIX points
+BAD_FIT_REL = 0.04      # ... and this fraction of the 30-day VIX level
 FLAT_REL = 0.02         # |v0 - theta| / theta below this: kappa is barely identified
 
 
@@ -151,7 +153,8 @@ def fit_day(date: str, quotes: dict[str, float], warm_start: tuple[float, float,
             fit.flags.append(f"{name}_at_bound")
     if not best.success:
         fit.flags.append("solver_failed")
-    if np.max(np.abs(res)) > BAD_FIT_VOLPTS:
+    level = quotes.get("VIX", float(np.mean(vix)))
+    if np.max(np.abs(res)) > max(BAD_FIT_VOLPTS, BAD_FIT_REL * level):
         fit.flags.append("bad_fit")
     if abs(v0 - theta) / theta < FLAT_REL:
         fit.flags.append("flat_term_structure")

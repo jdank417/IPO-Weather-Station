@@ -18,10 +18,7 @@ from pathlib import Path
 from pipeline.fetch_cboe import DEFAULT_CACHE
 
 SERIES = {
-    "CPIAUCSL": "CPI, all urban consumers, SA (monthly index)",
-    "T5YIE": "5-year breakeven inflation (daily, %)",
-    "T10YIE": "10-year breakeven inflation (daily, %)",
-    "DFII10": "10-year TIPS real yield (daily, %)",
+    "DTB3": "3-month Treasury bill rate, secondary market (daily, %)",
 }
 
 CSV_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={series}"

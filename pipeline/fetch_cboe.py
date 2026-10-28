@@ -1,10 +1,10 @@
-"""Download and parse Cboe daily index histories.
+"""Download and parse Cboe daily index histories (VIX family, VVIX, SPX).
 
 Source: Cboe's published "daily_prices" CSVs (the files linked from
 https://www.cboe.com/tradable_products/vix/vix_historical_data/). The CSVs are
 cached locally under ``data/cache/`` and are *not* committed: Cboe's website
-terms restrict republishing its data, so the site only ships derived fits plus
-the latest day's points. See docs/data_sources.rst.
+terms restrict republishing its data, so the site only ships derived values
+plus a few latest-day readings. See docs/data_sources.rst.
 """
 
 from __future__ import annotations
@@ -24,7 +24,8 @@ SERIES = {
     "VIX": "CLOSE",
     "VIX3M": "CLOSE",
     "VIX6M": "CLOSE",
-    "SKEW": "SKEW",
+    "VVIX": "VVIX",   # volatility of VIX: pins down Heston's vol of vol
+    "SPX": "SPX",     # S&P 500 level: realized correlation and today's level
 }
 
 DEFAULT_CACHE = Path(__file__).resolve().parent.parent / "data" / "cache"
