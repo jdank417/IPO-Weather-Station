@@ -146,3 +146,26 @@ supports `exog_tvtp`) and export the fitted parameters to JSON.
 6. (Stage 2) Gauge, what-if wiring, and the `.rst` write-up of the math.
 
 Work milestone by milestone and stop for review at the end of each.
+
+## Status and decisions (all six milestones done)
+
+Live at https://jdank417.github.io/IPO-Weather-Station/. Decisions made during
+the build (details in `docs/`):
+
+- Cboe raw CSVs are fetched in Actions but never committed; the site publishes
+  derived fits plus the latest day's index levels (`docs/data_sources.rst`).
+- Term-structure calibration adds a weak log-kappa prior (lambda = 0.01) because
+  near-linear curves only identify kappa*(theta - v0) (`docs/calibration.rst`).
+- COS truncation uses CF-derived c2/c4; the commonly quoted closed-form c2 was
+  unreliable (`docs/pricing.rst`). Defaults N = 2048, L = 12.
+- Regime model: log(1 + Ritter net IPOs), common variance (regime-specific
+  variances degenerate on discrete counts), TVTP on lagged standardized
+  [1y expected vol, SKEW, 5y breakeven]. Covariate effects are not
+  significant; BIC prefers constant transitions. The UI says so and shows a
+  90% band from parameter draws (`docs/regime_model.rst`).
+- `data/raw/IPOALL.xlsx` vintage runs through 2025-12; update it manually and
+  run `python -m pipeline.fit_ipo_regimes --compare`.
+- Surface redraws are throttled while dragging (WebGL flicker fix, `docs/ui.rst`).
+- Not done: optional local-projection extension.
+
+Checks before pushing: `.venv/bin/python -m pytest` and `npm test`.
