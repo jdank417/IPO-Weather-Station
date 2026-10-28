@@ -1,6 +1,11 @@
 User interface
 ==============
 
+The page is written for non-specialists first: a "weather report" forecast,
+a three-step explanation of how it is made, today's readings in plain words,
+one-tap scenarios, a "how to read it" line on every chart, and a glossary.
+Technical names (√v0, κ, Feller, ln(K/F)) stay visible but small.
+
 ``site/index.html`` with ``site/js/app.js`` (ES modules, no build step).
 
 Data
@@ -9,6 +14,22 @@ Data
 On load the page fetches ``data/latest.json`` (written by the daily pipeline).
 If it cannot be loaded the page says so and falls back to illustrative
 parameters; it never invents a "today".
+
+Scenarios
+---------
+
+"Today", "Calm market" (spot vol 11%, long-run 17%, SKEW 125, breakeven 2%),
+"Market panic" (spot vol 55%, long-run 30%, fast fade), "Crash worries"
+(SKEW 170) and "Inflation scare" (breakeven 3.5%). The forecast panel shows the
+change against today's forecast in percentage points.
+
+Forecast wording
+----------------
+
+"Cold" below 25%, "Changeable" to 60%, "Hot" above; confidence is "low" when
+the 90% band is wider than 50 points, "medium" above 25. The sentence about
+which inputs raise the odds is generated from the exported coefficient signs
+for the current regime, so it follows the data after re-estimation.
 
 Sliders
 -------
@@ -33,10 +54,13 @@ Surface
   flight, newer slider positions are coalesced into one pending request, so
   drags never queue up stale work. If module workers are unavailable, the page
   computes on the main thread. A full surface takes about 20 to 50 ms.
-* Redraw budget: the 3D surface is the expensive part (a WebGL buffer rebuild
-  per update). It is redrawn only when the worker returns new values, at most
-  about 8 times a second while a slider is held, and exactly once more on
-  release. The term-structure chart and slider labels update every frame.
+* Redraw budget: each chart measures its own draw cost (exponential average)
+  and, while a slider is held, waits at least 4x (surface) or 3x (fear curve)
+  that cost between redraws, so slow phones spend most main-thread time
+  tracking the finger. While dragging, the worker prices with 512 cosine terms
+  instead of 2048 (about 1e-4 of spot in stressed cases); on release the exact
+  surface is computed and drawn. On a 4x CPU-throttled phone emulation this cut
+  main-thread blocking during a drag about eightfold.
 * While a slider is held, the z-axis and color ranges only widen, so the
   surface reshapes in place instead of rescaling every frame; on release they
   auto-fit again.

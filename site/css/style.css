@@ -132,10 +132,12 @@ main { display: grid; gap: 16px; padding-bottom: 2rem; }
 .tile-value { margin: .2rem 0 0; font-size: 1.6rem; font-weight: 600; }
 .tile-sub { display: block; color: var(--muted); font-size: .78rem; font-weight: 400; }
 
-/* main sculptor layout */
+/* main sculptor layout: controls first (left on desktop, above on mobile) */
 .sculptor { display: grid; gap: 16px; }
+.sculptor-h { margin: 0; }
 @media (min-width: 60rem) {
-  .sculptor { grid-template-columns: minmax(0, 1fr) 20rem; align-items: start; }
+  .sculptor { grid-template-columns: 21rem minmax(0, 1fr); align-items: start; }
+  .sculptor-h { grid-column: 1 / -1; }
 }
 
 .card-head {
@@ -152,10 +154,51 @@ main { display: grid; gap: 16px; padding-bottom: 2rem; }
 .termstructure { width: 100%; height: 20rem; }
 
 /* IPO forecast */
-.gauge-body { display: grid; gap: 16px; align-items: center; }
-@media (min-width: 44rem) { .gauge-body { grid-template-columns: auto 1fr; gap: 32px; } }
+.forecast-body { display: grid; gap: 16px; align-items: center; }
+@media (min-width: 44rem) { .forecast-body { grid-template-columns: auto 1fr; gap: 40px; } }
+.condition { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.weather-icon { width: 40px; height: 40px; color: var(--text-2); display: inline-flex; }
+.weather-icon svg { width: 100%; height: 100%; }
+.condition-word { font-size: 1.35rem; font-weight: 600; }
 .hero-value { margin: 0; font-size: 3.5rem; font-weight: 600; line-height: 1; }
-.hero-label { margin: .35rem 0 0; color: var(--text-2); max-width: 16rem; }
+.hero-label { margin: .35rem 0 0; color: var(--text-2); max-width: 17rem; }
+.confidence { margin: 10px 0 0; font-weight: 600; font-size: .95rem; }
+.explain-grid { display: grid; gap: 12px 32px; margin-top: 16px; border-top: 1px solid var(--grid); padding-top: 12px; }
+@media (min-width: 44rem) { .explain-grid { grid-template-columns: 1fr 1fr; } }
+.mini-h { margin: 0 0 .25rem; font-size: .9rem; font-weight: 600; }
+.facts { margin: 0; padding-left: 1.1rem; color: var(--text-2); font-size: .85rem; }
+.facts li { margin: .2rem 0; }
+
+/* how it works */
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+@media (min-width: 48rem) { .steps { grid-template-columns: repeat(3, 1fr); } }
+.step { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; position: relative; }
+.step h3 { margin: 0 0 .3rem; font-size: 1rem; }
+.step p { margin: 0 0 .5rem; color: var(--text-2); font-size: .9rem; }
+.step a { font-size: .85rem; }
+.step-n {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 50%; margin-bottom: 8px;
+  background: var(--accent); color: #fff; font-weight: 600; font-size: .85rem;
+}
+
+/* explanations */
+.how-to-read { margin: 0 0 8px; color: var(--text-2); font-size: .9rem; max-width: 52rem; }
+.how-to-read strong { color: var(--text); }
+.tech { display: block; color: var(--muted); font-size: .75rem; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.glossary { margin: 0; display: grid; gap: 4px 16px; font-size: .9rem; }
+@media (min-width: 44rem) { .glossary { grid-template-columns: 12rem 1fr; } }
+.glossary dt { font-weight: 600; }
+.glossary dd { margin: 0 0 8px; color: var(--text-2); }
+
+/* scenarios */
+.scenarios { display: flex; flex-wrap: wrap; gap: 6px; }
+.scenarios button { padding: 6px 10px; font-size: .85rem; border-radius: 999px; }
+.scenarios button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.advanced summary { font-size: .85rem; }
+.advanced fieldset { margin-top: 10px; }
+.delta { color: var(--text-2); font-weight: 400; }
 .meter { position: relative; height: 14px; border-radius: 7px; background: var(--track-blue); overflow: hidden; }
 .meter-band { position: absolute; top: 0; bottom: 0; background: var(--band); }
 .meter-fill { position: absolute; top: 3px; bottom: 3px; left: 0; border-radius: 4px; background: var(--accent); transition: width .12s linear; }
@@ -201,7 +244,7 @@ fieldset + fieldset { border-top: 1px solid var(--grid); padding-top: 12px; }
   gap: 4px 8px;
   align-items: baseline;
 }
-.slider label { font-size: .9rem; }
+.slider label { font-size: .9rem; font-weight: 500; }
 .slider output { font-variant-numeric: tabular-nums; font-size: .9rem; color: var(--text-2); }
 .slider input { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); margin: 4px 0; height: 28px;
   /* a drag on the slider never scrolls the page */

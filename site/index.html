@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>IPO Weather Station</title>
-  <meta name="description" content="How the options market's fear and inflation relate to the odds of a hot IPO market, with a live Heston volatility surface.">
+  <meta name="description" content="A daily forecast of whether the IPO market is hot, built from the options market's fear gauge and inflation expectations.">
   <link rel="stylesheet" href="css/style.css">
   <script defer src="https://cdn.jsdelivr.net/npm/plotly.js-gl3d-dist-min@2.35.2/plotly-gl3d.min.js"
           integrity="sha384-2iqtxZG7QVTVIK1aD3fKbwQfCo/3iDyYom8ASNY8N8jdnpWBRncRnKFPZU95loka"
@@ -17,166 +17,242 @@
     <p class="eyebrow">IPO Weather Station</p>
     <h1>Is the IPO window open?</h1>
     <p class="lede">
-      Each trading day, the VIX term structure is read as a Heston variance forecast,
-      and a regime model links that volatility, crash fear (SKEW) and inflation
-      expectations to the odds that next month is a hot IPO month. Reshape the
-      volatility surface below and watch the forecast respond.
+      Companies go public in waves: some months are busy ("hot"), others quiet ("cold").
+      This page reads how nervous the stock market is today, and how much inflation
+      investors expect, and turns that into a forecast for next month. It updates every
+      trading day.
     </p>
   </header>
 
   <main class="wrap">
-    <section class="card gauge" aria-labelledby="gauge-h">
-      <h2 id="gauge-h" class="section-h">IPO window forecast</h2>
-      <div class="gauge-body">
-        <div class="gauge-hero">
+    <!-- 1. The forecast -->
+    <section class="card forecast" aria-labelledby="gauge-h">
+      <h2 id="gauge-h" class="section-h">Next month's IPO weather</h2>
+      <div class="forecast-body">
+        <div class="forecast-hero">
+          <div class="condition">
+            <span class="weather-icon" id="g-icon" aria-hidden="true"></span>
+            <span class="condition-word" id="g-condition">…</span>
+          </div>
           <p class="hero-value" id="g-value">…</p>
           <p class="hero-label" id="g-label">chance that next month is a hot IPO month</p>
         </div>
-        <div class="gauge-meter-wrap">
+        <div class="forecast-detail">
           <div class="meter" id="g-meter" role="img" aria-label="">
             <div class="meter-band" id="g-band"></div>
             <div class="meter-fill" id="g-fill"></div>
           </div>
           <div class="meter-scale" aria-hidden="true"><span>0%</span><span>50%</span><span>100%</span></div>
+          <p class="confidence" id="g-confidence"></p>
           <p class="note" id="g-band-text"></p>
         </div>
       </div>
-      <ul class="gauge-facts" id="g-facts"></ul>
+      <div class="explain-grid">
+        <div>
+          <h3 class="mini-h">What's a "hot" month?</h3>
+          <p id="g-hot-def" class="note">In a hot IPO market many more companies go public each month than in a cold one.</p>
+        </div>
+        <div>
+          <h3 class="mini-h">Where things stand</h3>
+          <ul class="facts" id="g-facts"></ul>
+        </div>
+      </div>
       <p class="note caveat">
-        Volatility, SKEW and inflation move these odds in sensible directions, but in
-        16 years of monthly data none of the effects is statistically significant.
-        Treat the number as what the model's point estimates imply; the range shows how
-        little the data pin down. <a href="#history-h">History and model details</a>.
+        Honest caveat: fear and inflation nudge these odds in sensible directions, but over
+        16 years of data the effect is too weak to be statistically reliable. Read the number
+        as a rough guide, and the shaded range as how unsure the model is.
+        <a href="#history-h">See the evidence</a>.
       </p>
     </section>
 
+    <!-- 2. How it works -->
+    <section aria-labelledby="how-h">
+      <h2 id="how-h" class="section-h">How the forecast is made</h2>
+      <ol class="steps">
+        <li class="step">
+          <span class="step-n" aria-hidden="true">1</span>
+          <h3>Read the market's fear</h3>
+          <p>Every day we take the VIX family of indices: how much turbulence options traders expect over the next 9 days to 6 months.</p>
+          <a href="#ts-h">See today's fear curve</a>
+        </li>
+        <li class="step">
+          <span class="step-n" aria-hidden="true">2</span>
+          <h3>Build a fear forecast</h3>
+          <p>A standard volatility model (Heston) turns those readings into a full "fear landscape": expected turbulence for every time horizon and price level.</p>
+          <a href="#surface-h">Explore the landscape</a>
+        </li>
+        <li class="step">
+          <span class="step-n" aria-hidden="true">3</span>
+          <h3>Link fear to IPOs</h3>
+          <p>A model trained on 16 years of IPO data estimates how fear, crash worries and inflation shift the odds of a hot IPO market.</p>
+          <a href="#history-h">See the IPO history</a>
+        </li>
+      </ol>
+    </section>
+
+    <!-- today's readings -->
     <section aria-labelledby="today-h" class="today">
-      <h2 id="today-h" class="section-h">Today's fit <span id="fit-date" class="muted"></span></h2>
+      <h2 id="today-h" class="section-h">Today's readings <span id="fit-date" class="muted"></span></h2>
       <div class="tiles" id="tiles">
-        <div class="tile"><p class="tile-label">Spot vol √v<sub>0</sub></p><p class="tile-value" id="t-v0">…</p></div>
-        <div class="tile"><p class="tile-label">Long-run vol √θ</p><p class="tile-value" id="t-theta">…</p></div>
-        <div class="tile"><p class="tile-label">Mean-reversion half-life</p><p class="tile-value" id="t-kappa">…</p></div>
-        <div class="tile"><p class="tile-label">Cboe SKEW</p><p class="tile-value" id="t-skew">…</p></div>
+        <div class="tile"><p class="tile-label">Fear right now</p><p class="tile-value" id="t-v0">…</p><p class="tile-sub">expected yearly swing in stock prices</p></div>
+        <div class="tile"><p class="tile-label">Long-run fear level</p><p class="tile-value" id="t-theta">…</p><p class="tile-sub">where fear tends to settle</p></div>
+        <div class="tile"><p class="tile-label">How fast fear fades</p><p class="tile-value" id="t-kappa">…</p></div>
+        <div class="tile"><p class="tile-label">Crash worries (SKEW)</p><p class="tile-value" id="t-skew">…</p></div>
       </div>
       <p class="note" id="fit-note"></p>
     </section>
 
-    <section class="sculptor" aria-labelledby="surface-h">
-      <div class="card chart-card">
-        <div class="card-head">
-          <h2 id="surface-h" class="section-h">Implied-volatility surface</h2>
-          <p class="badge" id="feller" role="status" hidden></p>
-        </div>
-        <div id="surface" class="surface" aria-describedby="surface-desc"></div>
-        <p id="surface-desc" class="note">
-          Strikes are in standard deviations of ln(K/F) at today's vol for each maturity
-          (−2.5 to +2); height and color show implied vol (%). Hover for exact values. Gaps mark prices too small to resolve.
-          <span id="calc-time"></span>
-        </p>
-        <details>
-          <summary>Show surface as a table</summary>
-          <div class="table-wrap"><table id="surface-table"></table></div>
-        </details>
-      </div>
-
-      <form class="card controls" id="controls" aria-label="Model inputs">
+    <!-- 3. Try it -->
+    <section class="sculptor" aria-labelledby="try-h">
+      <h2 id="try-h" class="section-h sculptor-h">Try it: what if the market changed?</h2>
+      <form class="card controls" id="controls" aria-label="Forecast inputs">
         <p class="mini-gauge" id="mini-gauge" aria-live="polite">Hot-IPO odds next month: …</p>
+        <div class="scenarios" role="group" aria-label="Scenarios">
+          <button type="button" data-scenario="today" aria-pressed="true">Today</button>
+          <button type="button" data-scenario="calm" aria-pressed="false">Calm market</button>
+          <button type="button" data-scenario="panic" aria-pressed="false">Market panic</button>
+          <button type="button" data-scenario="crash" aria-pressed="false">Crash worries</button>
+          <button type="button" data-scenario="inflation" aria-pressed="false">Inflation scare</button>
+        </div>
         <fieldset>
-          <legend>Fitted each day from the VIX term structure · feed the surface and the IPO forecast</legend>
+          <legend>Market fear · changes the landscape and the forecast</legend>
           <div class="slider">
-            <label for="s-v0">Spot vol √v<sub>0</sub></label>
+            <label for="s-v0">Fear right now <span class="tech">spot volatility √v<sub>0</sub></span></label>
             <output for="s-v0" id="o-v0"></output>
             <input type="range" id="s-v0" min="0.05" max="1.00" step="0.005">
           </div>
           <div class="slider">
-            <label for="s-theta">Long-run vol √θ</label>
+            <label for="s-theta">Long-run fear level <span class="tech">√θ</span></label>
             <output for="s-theta" id="o-theta"></output>
             <input type="range" id="s-theta" min="0.05" max="0.80" step="0.005">
           </div>
           <div class="slider">
-            <label for="s-kappa">Mean reversion κ</label>
+            <label for="s-kappa">How fast fear fades <span class="tech">mean reversion κ</span></label>
             <output for="s-kappa" id="o-kappa"></output>
             <input type="range" id="s-kappa" min="0.1" max="20" step="0.05">
           </div>
         </fieldset>
         <fieldset>
-          <legend>Not identified by the term structure: your assumption · surface only</legend>
+          <legend>Other forecast inputs · forecast only</legend>
           <div class="slider">
-            <label for="s-xi">Vol of vol ξ</label>
-            <output for="s-xi" id="o-xi"></output>
-            <input type="range" id="s-xi" min="0.05" max="2.0" step="0.01">
-          </div>
-          <div class="slider">
-            <label for="s-rho">Spot–vol correlation ρ</label>
-            <output for="s-rho" id="o-rho"></output>
-            <input type="range" id="s-rho" min="-0.99" max="0.5" step="0.01">
-          </div>
-          <p class="note">ξ and ρ shape the smile and skew but leave the VIX term structure unchanged, so the daily fit cannot pin them down. They do not affect the IPO forecast. Defaults: ξ = 0.6, ρ = −0.7.</p>
-        </fieldset>
-        <fieldset>
-          <legend>IPO forecast only</legend>
-          <div class="slider">
-            <label for="s-skew">Cboe SKEW</label>
+            <label for="s-skew">Crash worries <span class="tech">Cboe SKEW</span></label>
             <output for="s-skew" id="o-skew"></output>
             <input type="range" id="s-skew" min="100" max="180" step="0.5">
           </div>
           <div class="slider">
-            <label for="s-be5">5-year breakeven inflation</label>
+            <label for="s-be5">Expected inflation, next 5 years <span class="tech">breakeven</span></label>
             <output for="s-be5" id="o-be5"></output>
             <input type="range" id="s-be5" min="0" max="4" step="0.01">
           </div>
-          <p class="note" id="vol1y-note">The forecast's volatility input is the 1-year expected vol implied by v0, θ and κ.</p>
         </fieldset>
+        <details class="advanced">
+          <summary>Advanced: landscape shape only</summary>
+          <fieldset>
+            <legend class="sr-only">Landscape shape</legend>
+            <div class="slider">
+              <label for="s-xi">How jumpy fear is <span class="tech">vol of vol ξ</span></label>
+              <output for="s-xi" id="o-xi"></output>
+              <input type="range" id="s-xi" min="0.05" max="2.0" step="0.01">
+            </div>
+            <div class="slider">
+              <label for="s-rho">Fear rises when prices fall <span class="tech">correlation ρ</span></label>
+              <output for="s-rho" id="o-rho"></output>
+              <input type="range" id="s-rho" min="-0.99" max="0.5" step="0.01">
+            </div>
+            <p class="note">These two shape the landscape's tilt and curvature. The VIX readings can't pin them down, and they don't affect the IPO forecast. Defaults: 0.6 and −0.7.</p>
+          </fieldset>
+        </details>
+        <p class="note" id="vol1y-note"></p>
         <button type="button" id="reset">Reset to today</button>
       </form>
+
+      <div class="card chart-card">
+        <div class="card-head">
+          <h2 id="surface-h" class="section-h">The fear landscape</h2>
+          <p class="badge" id="feller" role="status" hidden></p>
+        </div>
+        <p class="how-to-read">
+          <strong>How to read it:</strong> height and color show how much turbulence the options
+          market prices in (implied volatility). Front to back is time, from 1 week to 2 years.
+          Left to right is price level: big drops on the left, big rises on the right. A higher
+          left side means investors pay more to protect against a crash.
+        </p>
+        <div id="surface" class="surface" aria-describedby="surface-desc"></div>
+        <p id="surface-desc" class="note">
+          Technical: Heston implied volatility; strikes in standard deviations of ln(K/F) at
+          today's vol (−2.5 to +2). Gaps mark prices too small to resolve. Drag to rotate.
+          <span id="calc-time"></span>
+        </p>
+        <details>
+          <summary>Show the landscape as a table</summary>
+          <div class="table-wrap"><table id="surface-table"></table></div>
+        </details>
+      </div>
     </section>
 
+    <!-- fear curve -->
     <section class="card" aria-labelledby="ts-h">
-      <h2 id="ts-h" class="section-h">VIX term structure vs. the fitted curve</h2>
+      <h2 id="ts-h" class="section-h">Today's fear curve</h2>
+      <p class="how-to-read">
+        <strong>How to read it:</strong> the dots are today's VIX readings for 9 days, 1 month,
+        3 months and 6 months ahead. The line is the model fitted through them. Rising to the
+        right means traders expect more turbulence later than now (calm today); falling means
+        stress right now that is expected to ease.
+      </p>
       <div id="termstructure" class="termstructure"></div>
       <details>
         <summary>Show as a table</summary>
         <div class="table-wrap"><table id="ts-table"></table></div>
       </details>
     </section>
+
+    <!-- history -->
     <section class="card" aria-labelledby="history-h">
-      <h2 id="history-h" class="section-h">IPO activity and the hot regime</h2>
-      <p class="note" id="history-note"></p>
-      <h3 class="chart-h">Net IPOs per month</h3>
+      <h2 id="history-h" class="section-h">Hot and cold IPO markets since 2009</h2>
+      <p class="how-to-read" id="history-note">
+        <strong>How to read it:</strong> the top chart counts companies going public each month.
+        The bottom chart is the model's estimate that the market was in its hot state; shaded
+        bands mark hot periods in both. Orange dots are forecasts for months that have no IPO
+        data yet.
+      </p>
+      <h3 class="chart-h">Companies going public per month</h3>
       <div id="ipo-chart" class="small-chart"></div>
-      <h3 class="chart-h">Probability of the hot regime</h3>
+      <h3 class="chart-h">Chance the market was hot</h3>
       <div id="phot-chart" class="small-chart"></div>
       <details>
         <summary>Show as a table</summary>
         <div class="table-wrap"><table id="history-table"></table></div>
       </details>
       <details>
-        <summary>Model coefficients and comparison</summary>
+        <summary>For analysts: model coefficients and comparison</summary>
         <div class="table-wrap"><table id="coef-table"></table></div>
         <div class="table-wrap"><table id="comparison-table"></table></div>
         <p class="note">Two-regime Markov-switching model of log(1 + net IPOs) with logistic time-varying transition probabilities (Diebold, Lee &amp; Weinbach 1994; Filardo 1994), estimated by maximum likelihood. Covariates are last month's values, standardized. Full write-up in <a href="https://github.com/jdank417/IPO-Weather-Station/blob/main/docs/regime_model.rst">docs/regime_model.rst</a>.</p>
       </details>
     </section>
+
+    <!-- glossary -->
+    <section class="card" aria-labelledby="glossary-h">
+      <h2 id="glossary-h" class="section-h">Plain-English glossary</h2>
+      <dl class="glossary">
+        <dt>IPO</dt><dd>Initial public offering: a company selling shares on the stock market for the first time. Counts here exclude SPACs, penny stocks and similar listings.</dd>
+        <dt>Hot / cold IPO market</dt><dd>Two states the model finds in the data: busy periods with many listings, and quiet ones. Markets tend to stay in one state for months.</dd>
+        <dt>VIX</dt><dd>Cboe's "fear index": the stock-price turbulence that S&amp;P 500 options imply over the next 30 days. VIX9D, VIX3M and VIX6M do the same for 9 days, 3 months and 6 months.</dd>
+        <dt>Volatility</dt><dd>How much prices are expected to swing over a year, in percent. 16% means a typical yearly move of about 16%.</dd>
+        <dt>SKEW</dt><dd>Cboe index of how expensive crash protection is compared with ordinary protection. Higher means more worry about a sudden fall.</dd>
+        <dt>Breakeven inflation</dt><dd>The average inflation rate bond investors expect over the next 5 years, read from the gap between ordinary and inflation-protected Treasury yields.</dd>
+        <dt>Heston model</dt><dd>A standard model in which volatility drifts back toward a long-run level at a certain speed and is itself random. It turns a few readings into a whole landscape of option prices.</dd>
+      </dl>
+    </section>
   </main>
 
   <footer class="wrap foot">
-    <h2 class="section-h">Built in six milestones</h2>
-    <ol class="milestones">
-      <li class="done"><span>Repo scaffolding and Pages deploy</span></li>
-      <li class="done"><span>Cboe VIX term-structure fetcher and daily Heston calibration</span></li>
-      <li class="done"><span>In-browser Heston / COS pricer and implied-vol solver</span></li>
-      <li class="done"><span>Interactive volatility surface with sliders</span></li>
-      <li class="done"><span>IPO regime model: Ritter and FRED data, Markov switching with time-varying transitions</span></li>
-      <li class="done"><span>Hot-IPO gauge with what-if links to the surface</span></li>
-    </ol>
     <p>
-      Model: Heston (1993). Characteristic function in the Albrecher et al. (2007) form,
-      priced with the COS method (Fang &amp; Oosterlee 2008), all in your browser.
-      Index data: Cboe Global Markets, used to fit parameters; raw data is not redistributed.
-      IPO data: Jay R. Ritter, University of Florida (vintage through December 2025).
-      Inflation: Federal Reserve Bank of St. Louis, FRED.
-      Not investment advice.
-      <a href="https://github.com/jdank417/IPO-Weather-Station">Source and docs</a>.
+      Data: Cboe Global Markets (VIX indices and SKEW; used to fit the model, raw data not
+      redistributed), Jay R. Ritter, University of Florida (monthly IPO counts, through
+      December 2025), Federal Reserve Bank of St. Louis, FRED (inflation). Everything you
+      move on this page is computed in your browser. Not investment advice.
+      <a href="https://github.com/jdank417/IPO-Weather-Station">Source code and technical docs</a>.
     </p>
   </footer>
 </body>
