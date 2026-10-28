@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>IPO Weather Station</title>
+  <meta name="description" content="Linking the stock market's expected volatility and inflation to the odds that the IPO market is hot.">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="masthead">
+    <div class="wrap">
+      <p class="eyebrow">IPO Weather Station</p>
+      <h1>How hot is the IPO market, given today's fear and inflation?</h1>
+      <p class="lede">
+        A static, client-side model that reads the VIX term structure as a
+        Heston variance forecast, sculpts the implied-volatility surface it
+        implies, and (in Stage 2) maps volatility and inflation onto the
+        probability of a hot IPO regime.
+      </p>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="status" aria-labelledby="status-h">
+      <h2 id="status-h">Under construction</h2>
+      <p>The site is being built in milestones. Checked items are live.</p>
+      <ol class="milestones">
+        <li class="done"><span>Repo scaffolding and Pages deploy</span></li>
+        <li><span>Cboe VIX term-structure fetcher and daily Heston calibration</span></li>
+        <li><span>In-browser Heston / COS pricer and implied-vol solver</span></li>
+        <li><span>Interactive volatility surface with sliders</span></li>
+        <li><span>IPO regime model: Ritter and FRED data, Markov switching with time-varying transitions</span></li>
+        <li><span>Hot-IPO gauge with what-if links to the surface</span></li>
+      </ol>
+    </section>
+  </main>
+
+  <footer class="wrap foot">
+    <p>Static site on GitHub Pages. Data refreshed by GitHub Actions. Not investment advice.</p>
+  </footer>
+</body>
+</html>
