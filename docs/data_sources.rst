@@ -50,6 +50,27 @@ Whether even that requires a license from Cboe is a decision for the
 repository owner. Removing the latest-day levels from ``latest.json`` is a
 one-line change in ``pipeline/export_json.py``.
 
+Jay Ritter IPO data
+-------------------
+
+"Monthly Number of IPOs and the Average First-Day Return", Jay R. Ritter,
+University of Florida, https://site.warrington.ufl.edu/ritter/ipo-data/
+(file https://site.warrington.ufl.edu/ritter/files/IPOALL.xlsx). Downloaded
+2026-10-28 into ``data/raw/IPOALL.xlsx`` (sha256 prefix ``00f2f3ae0badd456``).
+**Vintage: January 1960 to December 2025.** The page states no terms of use.
+The file is the source of record and is committed for reproducibility; it is
+not fetched automatically. To update it, download a new vintage over it and
+re-run ``python -m pipeline.fit_ipo_regimes --compare``.
+
+FRED
+----
+
+Federal Reserve Bank of St. Louis, FRED: ``CPIAUCSL`` (CPI), ``T5YIE`` and
+``T10YIE`` (breakeven inflation), ``DFII10`` (10-year TIPS real yield).
+Downloaded daily via the public ``fredgraph.csv`` endpoint, or the FRED API
+when the optional ``FRED_API_KEY`` Actions secret is set. Only monthly
+aggregates are published (``site/data/monthly.json``).
+
 Output files
 ------------
 
@@ -59,5 +80,10 @@ Output files
 ``site/data/latest.json``
    Latest good fit, its observed points and residuals, a sampled fitted curve
    (1 to 365 days) and the latest SKEW.
+``site/data/monthly.json``
+   Monthly covariate panel (volatility summaries, SKEW, inflation measures).
+``site/data/regime.json``
+   Regime model parameters, standard errors, model comparison, filtered and
+   smoothed probabilities, forward covariates and parameter draws.
 
 Output is deterministic, so the daily job commits only when the data changes.

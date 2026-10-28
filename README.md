@@ -13,7 +13,7 @@ expected volatility ("fear") and inflation to the odds that the IPO market is
   covariates onto the probability of a hot IPO market.
 
 Status: Stage 1 complete (Milestones 1 to 4): live volatility surface sculptor.
-Next: Stage 2, the IPO window gauge. See `CLAUDE.md` for the
+Stage 2 regime model estimated (Milestone 5); gauge UI in progress. See `CLAUDE.md` for the
 full plan and `docs/` for design notes.
 
 ## Layout
@@ -60,5 +60,8 @@ Every push to `main` that touches `site/` publishes the site.
 - Cboe Global Markets: VIX9D, VIX, VIX3M, VIX6M and SKEW daily index
   histories (cdn-api.cboe.com `daily_prices` CSVs). Raw files are not
   redistributed here; see `docs/data_sources.rst` for usage terms.
-- Jay R. Ritter, University of Florida, IPO data (Stage 2).
-- Federal Reserve Bank of St. Louis, FRED (Stage 2).
+- Jay R. Ritter, University of Florida, "Monthly Number of IPOs and the
+  Average First-Day Return" (IPOALL.xlsx),
+  https://site.warrington.ufl.edu/ritter/ipo-data/. Vintage: 1960-01 to
+  2025-12, downloaded 2026-10-28 to `data/raw/IPOALL.xlsx`.
+- Federal Reserve Bank of St. Louis, FRED: CPIAUCSL, T5YIE, T10YIE, DFII10.

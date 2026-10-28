@@ -11,3 +11,4 @@ Design and mathematical documentation for the IPO Weather Station.
    calibration
    pricing
    ui
+   regime_model

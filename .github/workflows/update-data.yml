@@ -1,5 +1,6 @@
 # Daily: fetch Cboe VIX term-structure histories, calibrate Heston (v0, kappa, theta)
-# for every day, and commit the derived JSON in site/data/. The deploy workflow
+# for every day, refresh FRED and the IPO regime model, and commit the derived
+# JSON in site/data/. The deploy workflow
 # chains on this one's completion. Raw Cboe CSVs are never committed.
 
 name: Update data
@@ -42,8 +43,17 @@ jobs:
       - name: Tests
         run: python -m pytest -q
 
-      - name: Fetch, calibrate, export
+      - name: "Stage 1: fetch Cboe, calibrate, export"
         run: python -m pipeline.update
+
+      # Stage 2 must not block Stage 1's data: on failure the Stage 1 JSON is
+      # still committed and the job is marked failed at the end.
+      - name: "Stage 2: FRED, monthly panel, regime model"
+        id: stage2
+        continue-on-error: true
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}   # optional; public CSVs are used without it
+        run: python -m pipeline.fit_ipo_regimes
 
       - name: Commit changed data
         run: |
@@ -56,3 +66,9 @@ jobs:
           git add site/data
           git commit -m "data: update VIX term-structure fits ($(jq -r .date site/data/latest.json))"
           git push origin HEAD:main
+
+      - name: Fail if Stage 2 failed
+        if: steps.stage2.outcome == 'failure'
+        run: |
+          echo "::error::Stage 2 (regime model) failed; Stage 1 data was still committed."
+          exit 1
