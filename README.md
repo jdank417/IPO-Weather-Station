@@ -12,7 +12,7 @@ expected volatility ("fear") and inflation to the odds that the IPO market is
   time-varying transition probabilities maps volatility and inflation
   covariates onto the probability of a hot IPO market.
 
-Status: Milestone 2 (daily VIX term-structure calibration). See `CLAUDE.md` for the
+Status: Milestone 3 (in-browser Heston/COS pricer and implied-vol solver). See `CLAUDE.md` for the
 full plan and `docs/` for design notes.
 
 ## Layout
@@ -40,6 +40,13 @@ python3 -m venv .venv && .venv/bin/pip install -r pipeline/requirements.txt
 .venv/bin/python -m pytest
 .venv/bin/python -m pipeline.update          # download Cboe CSVs, fit, write site/data/
 .venv/bin/python -m pipeline.update --offline  # reuse data/cache/
+```
+
+JS tests (Node 22+, no dependencies):
+
+```
+npm test
+.venv/bin/python -m pipeline.tests.make_heston_fixture   # regenerate the reference fixture
 ```
 
 ## Deploying

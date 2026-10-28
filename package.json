@@ -1,0 +1,12 @@
+{
+  "name": "ipo-weather-station",
+  "private": true,
+  "type": "module",
+  "description": "Static site; JS tests use the built-in node:test runner (no dependencies).",
+  "scripts": {
+    "test": "node --test \"tests/js/**/*.test.js\""
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
