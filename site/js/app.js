@@ -112,9 +112,70 @@ function requestSurface(p) {
 
 function onSurface(iv, ms) {
   state.iv = iv;
-  $('calc-time').textContent = `Computed in ${ms.toFixed(0)} ms in your browser.`;
-  drawSurface();
-  renderSurfaceTable();
+  // build the plotted z array once per result so redraws reuse it
+  state.z = iv.map((row) => row.map((v) => (Number.isFinite(v) ? 100 * v : null)));
+  state.calcMs = ms;
+  scheduleDraw({ surface: true, ts: false });
+}
+
+/* ---------- drawing: at most once per animation frame ---------- */
+
+// The 3D surface is by far the most expensive redraw. It is redrawn only when
+// its data or appearance changed, and at most every SURFACE_MIN_MS while a
+// slider is held so the main thread stays free to track the finger; the exact
+// final surface is drawn on release.
+const SURFACE_MIN_MS = 120;
+const dirty = { surface: false, ts: false };
+let drawQueued = false;
+let lastSurfaceDraw = 0;
+let surfaceTimer = null;
+
+function scheduleDraw({ surface = true, ts = true } = {}) {
+  dirty.surface ||= surface;
+  dirty.ts ||= ts;
+  if (drawQueued) return;
+  drawQueued = true;
+  requestAnimationFrame(flushDraw);
+}
+
+function flushDraw() {
+  drawQueued = false;
+  if (dirty.ts) {
+    dirty.ts = false;
+    drawTermStructure();
+    if ($('ts-table').closest('details').open) renderTsTable();
+  }
+  if (dirty.surface) {
+    const wait = dragRange ? SURFACE_MIN_MS - (performance.now() - lastSurfaceDraw) : 0;
+    if (wait > 0) {
+      clearTimeout(surfaceTimer);
+      surfaceTimer = setTimeout(() => scheduleDraw({ surface: true, ts: false }), wait);
+      return;
+    }
+    dirty.surface = false;
+    lastSurfaceDraw = performance.now();
+    if (state.calcMs != null) $('calc-time').textContent = `Computed in ${state.calcMs.toFixed(0)} ms in your browser.`;
+    drawSurface();
+    if ($('surface-table').closest('details').open) renderSurfaceTable();
+  }
+}
+
+// While a slider is held, the z-axis and color ranges only grow, never jump
+// around, so the surface reshapes in place instead of rescaling every frame.
+let dragRange = null;
+function ivRange() {
+  let lo = Infinity, hi = -Infinity;
+  for (const row of state.iv || []) for (const v of row) if (Number.isFinite(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+  return Number.isFinite(lo) ? [100 * lo, 100 * hi] : null;
+}
+function startDrag() {
+  const r = ivRange();
+  dragRange = r ? [r[0] - 0.05 * (r[1] - r[0]), r[1] + 0.05 * (r[1] - r[0])] : null;
+}
+function endDrag() {
+  if (!dragRange) return;
+  dragRange = null;
+  scheduleDraw({ surface: true, ts: false });
 }
 
 /* ---------- charts ---------- */
@@ -128,9 +189,14 @@ function drawSurface() {
   const t = tokens();
   const { Ts, zs, ks } = state.grid;
   const narrow = document.getElementById('surface').clientWidth < 560;
+  if (dragRange) {
+    const r = ivRange();
+    if (r) dragRange = [Math.min(dragRange[0], r[0]), Math.max(dragRange[1], r[1])];
+  }
+  const locked = dragRange ? { range: dragRange.slice(), autorange: false } : { autorange: true };
   // plot on a rectangular (sd, T) grid; the hover reports the actual ln(K/F)
-  const z = state.iv.map((row) => row.map((v) => (Number.isFinite(v) ? 100 * v : null)));
-  const custom = Ts.map((T, i) => ks[i].map((k) => [MATURITY_LABELS[i], k]));
+  const { z } = state;
+  const custom = state.grid.custom ||= Ts.map((T, i) => ks[i].map((k) => [MATURITY_LABELS[i], k]));
 
   const axis = (title) => ({
     title: { text: title, font: { size: 12, color: t.text2 } },
@@ -140,15 +206,15 @@ function drawSurface() {
   });
 
   Plotly.react('surface', [{
-    type: 'surface', x: zs, y: Ts, z, customdata: custom,
+    type: 'surface', uid: 'iv-surface', x: zs, y: Ts, z, customdata: custom,
     colorscale: t.colorscale,
+    ...(dragRange ? { cauto: false, cmin: dragRange[0], cmax: dragRange[1] } : { cauto: true }),
     // narrow screens: no colorbar (hover and the table carry the values)
     showscale: !narrow,
     colorbar: {
       title: { text: 'IV %', font: { color: t.text2, size: 12 } },
       tickfont: { color: t.muted, size: 11 }, thickness: 12, len: 0.6, outlinewidth: 0,
     },
-    contours: { z: { show: true, usecolormap: true, highlightcolor: t.text, project: { z: false } } },
     hovertemplate: 'Maturity %{customdata[0]}<br>Strike %{x:.2f} sd · ln(K/F) %{customdata[1]:.3f}<br>Implied vol %{z:.1f}%<extra></extra>',
   }], {
     uirevision: 'keep',
@@ -158,13 +224,31 @@ function drawSurface() {
     scene: {
       xaxis: axis(narrow ? 'strike sd' : 'strike (sd of ln K/F)'),
       yaxis: axis(narrow ? 'T (yr)' : 'maturity (years)'),
-      zaxis: axis(narrow ? '' : 'implied vol (%)'),
+      zaxis: { ...axis(narrow ? '' : 'implied vol (%)'), ...locked },
       camera: { eye: narrow ? { x: -1.6, y: -1.6, z: 0.9 } : { x: -1.45, y: -1.6, z: 0.75 } },
       aspectmode: 'manual',
       aspectratio: narrow ? { x: 0.85, y: 0.85, z: 0.55 } : { x: 1.2, y: 1.2, z: 0.75 },
     },
     hoverlabel: { bgcolor: t.surface, bordercolor: t.axis, font: { color: t.text, family: t.font } },
-  }, { responsive: true, displaylogo: false, modeBarButtonsToRemove: ['toImage', 'resetCameraLastSave3d'] });
+  }, { responsive: false, displaylogo: false, modeBarButtonsToRemove: ['toImage', 'resetCameraLastSave3d'] });
+  watchGlContext();
+}
+
+// If the browser drops the WebGL context (GPU memory pressure, backgrounded tab,
+// mobile GPU reset), Plotly cannot recover by itself and the surface vanishes.
+// Rebuild the plot from scratch once the context is gone.
+function watchGlContext() {
+  const canvas = document.querySelector('#surface canvas');
+  if (!canvas || canvas.__watched) return;
+  canvas.__watched = true;
+  canvas.addEventListener('webglcontextlost', (e) => {
+    e.preventDefault();
+    console.warn('WebGL context lost; rebuilding the surface');
+    setTimeout(() => {
+      Plotly.purge('surface');
+      scheduleDraw({ surface: true, ts: false });
+    }, 250);
+  });
 }
 
 function differsFromToday(p) {
@@ -179,24 +263,25 @@ function drawTermStructure() {
   const traces = [];
   if (state.latest) {
     traces.push({
-      type: 'scatter', mode: 'lines', name: "Today's fit",
+      type: 'scatter', mode: 'lines', name: "Today's fit", uid: 'ts-today', legendrank: 1,
       x: state.latest.curve.days, y: state.latest.curve.level,
       line: { color: t.s1, width: 2 },
       hovertemplate: "Today's fit %{y:.2f}<extra></extra>",
     });
   }
-  if (differsFromToday(state.params)) {
-    traces.push({
-      type: 'scatter', mode: 'lines', name: 'Your parameters',
-      x: days, y: days.map((d) => modelVix(d / 365, state.params)),
-      line: { color: t.s3, width: 2 },
-      hovertemplate: 'Your parameters %{y:.2f}<extra></extra>',
-    });
-  }
+  // always present (drawn beneath today's fit) so the legend never reflows
+  const yours = differsFromToday(state.params);
+  traces.unshift({
+    type: 'scatter', mode: 'lines', name: 'Your parameters', uid: 'ts-yours', legendrank: 2,
+    x: days, y: days.map((d) => modelVix(d / 365, state.params)),
+    line: { color: t.s3, width: 2 },
+    hoverinfo: yours ? undefined : 'skip',
+    hovertemplate: 'Your parameters %{y:.2f}<extra></extra>',
+  });
   if (state.latest) {
     const pts = state.latest.points;
     traces.push({
-      type: 'scatter', mode: 'markers+text', name: 'Cboe index close',
+      type: 'scatter', mode: 'markers+text', name: 'Cboe index close', uid: 'ts-cboe', legendrank: 3,
       x: pts.map((p) => p.days), y: pts.map((p) => p.level),
       text: pts.map((p) => p.symbol), textposition: pts.map((p, i) => (i < 2 ? 'bottom right' : 'top left')),
       textfont: { color: t.text2, size: 11 },
@@ -219,7 +304,7 @@ function drawTermStructure() {
       gridcolor: t.grid, linecolor: t.axis, tickfont: { color: t.muted }, zeroline: false,
     },
     hoverlabel: { bgcolor: t.surface, bordercolor: t.axis, font: { color: t.text } },
-  }, { responsive: true, displaylogo: false, displayModeBar: false });
+  }, { responsive: false, displaylogo: false, displayModeBar: false });
 }
 
 /* ---------- tables, tiles, badge ---------- */
@@ -276,15 +361,38 @@ function renderTiles() {
 
 function update() {
   renderFeller(state.params);
-  requestSurface(state.params);
-  drawTermStructure();
-  renderTsTable();
+  requestSurface(state.params);          // the surface redraws when the worker answers
+  scheduleDraw({ surface: false, ts: true });
 }
 
 function reset() {
   state.params = { ...state.today, xi: DEFAULT_XI, rho: DEFAULT_RHO };
   setSliders(state.params);
   update();
+}
+
+// Resize charts only when their width changes (debounced). Plotly's own
+// "responsive" mode also reacts to height-only window resizes, which mobile
+// browsers fire whenever the address bar shows or hides.
+function watchWidths() {
+  if (!('ResizeObserver' in window)) return;
+  const widths = new Map();
+  let timer = null;
+  const ro = new ResizeObserver((entries) => {
+    let changed = false;
+    for (const e of entries) {
+      const w = Math.round(e.contentRect.width);
+      if (widths.get(e.target) !== w) { widths.set(e.target, w); changed = true; }
+    }
+    if (!changed || !plotlyReady()) return;
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      for (const id of ['surface', 'termstructure']) if ($(id).data) Plotly.Plots.resize($(id));
+      scheduleDraw();
+    }, 150);
+  });
+  ro.observe($('surface'));
+  ro.observe($('termstructure'));
 }
 
 async function main() {
@@ -303,13 +411,17 @@ async function main() {
   startWorker();
 
   $('controls').addEventListener('input', (e) => { readSlider(e.target); update(); });
+  $('controls').addEventListener('pointerdown', (e) => { if (e.target.type === 'range') startDrag(); });
+  for (const ev of ['pointerup', 'pointercancel', 'change']) window.addEventListener(ev, endDrag);
+  for (const d of document.querySelectorAll('details')) d.addEventListener('toggle', () => scheduleDraw());
+  watchWidths();
   $('reset').addEventListener('click', reset);
   reset();
 
   // Plotly is a deferred classic script; it is normally ready before this module runs.
   if (!plotlyReady()) {
     window.addEventListener('load', () => {
-      if (plotlyReady()) { drawSurface(); drawTermStructure(); }
+      if (plotlyReady()) scheduleDraw();
       else {
         for (const id of ['surface', 'termstructure']) {
           $(id).innerHTML = '<p class="error">The chart library could not be loaded. The tables below still show the values.</p>';
@@ -320,10 +432,7 @@ async function main() {
   }
 
   // redraw with the other palette when the color scheme changes
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-    drawSurface();
-    drawTermStructure();
-  });
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => scheduleDraw());
 }
 
 main();

@@ -175,7 +175,9 @@ fieldset + fieldset { border-top: 1px solid var(--grid); padding-top: 12px; }
 }
 .slider label { font-size: .9rem; }
 .slider output { font-variant-numeric: tabular-nums; font-size: .9rem; color: var(--text-2); }
-.slider input { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); margin: 4px 0; height: 24px; }
+.slider input { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); margin: 4px 0; height: 28px;
+  /* a drag on the slider never scrolls the page */
+  touch-action: none; }
 
 button {
   font: inherit;

@@ -33,6 +33,19 @@ Surface
   flight, newer slider positions are coalesced into one pending request, so
   drags never queue up stale work. If module workers are unavailable, the page
   computes on the main thread. A full surface takes about 20 to 50 ms.
+* Redraw budget: the 3D surface is the expensive part (a WebGL buffer rebuild
+  per update). It is redrawn only when the worker returns new values, at most
+  about 8 times a second while a slider is held, and exactly once more on
+  release. The term-structure chart and slider labels update every frame.
+* While a slider is held, the z-axis and color ranges only widen, so the
+  surface reshapes in place instead of rescaling every frame; on release they
+  auto-fit again.
+* Charts resize only when their width changes (debounced). Plotly's
+  ``responsive`` mode is off because mobile browsers fire height-only resizes
+  whenever the address bar shows or hides.
+* If the browser drops the WebGL context, the page rebuilds the surface.
+* Range inputs use ``touch-action: none`` so a slightly diagonal drag on a
+  slider does not scroll the page.
 * Colors: one sequential blue ramp, light to dark for low to high in light
   mode, and stepped toward the dark surface for low values in dark mode.
 * A status badge (icon plus text, never color alone) reports whether the Feller
